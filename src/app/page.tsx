@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "./supabase";
 
 type Lang = "ko" | "en" | "ne" | "km" | "tl";
 type Team = "vacuum" | "newmaterial";
