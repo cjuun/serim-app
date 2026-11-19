@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import AttendanceManager from "./AttendanceManager";
 
 type Lang = "ko" | "en" | "ne" | "km" | "tl";
 type Team = "vacuum" | "newmaterial";
@@ -1003,11 +1004,16 @@ const renderCalendar = () => {
             renderDashboard()
           ) : page === "calendar" ? (
             renderCalendar()
-          ) : page === "notice" ? (
-            renderNoticePage()
-          ) : (
-            renderPlaceholder()
-          )}
+) : page === "notice" ? (
+  renderNoticePage()
+) : page === "attendance" ? (
+  <AttendanceManager
+    team={team}
+    isAdmin={isAdmin}
+  />
+) : (
+  renderPlaceholder()
+)}
         </main>
       </div>
     </div>
