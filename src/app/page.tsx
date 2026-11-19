@@ -239,9 +239,14 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [calendarDate, setCalendarDate] = useState(
-    new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+const [calendarDate, setCalendarDate] = useState<Date | null>(null);
+
+useEffect(() => {
+  const today = new Date();
+  setCalendarDate(
+    new Date(today.getFullYear(), today.getMonth(), 1)
   );
+}, []);
 
   const t = UI[lang];
 
@@ -663,9 +668,17 @@ export default function Home() {
     </div>
   );
 
-  const renderCalendar = () => {
-    const year = calendarDate.getFullYear();
-    const month = calendarDate.getMonth();
+const renderCalendar = () => {
+  if (!calendarDate) {
+    return (
+      <div className="rounded-xl bg-white p-8 text-center">
+        캘린더를 불러오는 중...
+      </div>
+    );
+  }
+
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
