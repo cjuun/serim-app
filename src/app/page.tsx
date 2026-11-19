@@ -1,7 +1,8 @@
 
 "use client";
 
-import React, { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 type Lang = "ko" | "en" | "ne" | "km" | "tl";
 type Team = "vacuum" | "newmaterial";
@@ -9,12 +10,16 @@ type Team = "vacuum" | "newmaterial";
 type Notice = {
   id: number;
   team: Team;
-  date: string;
+  content_ko: string;
+  content_en: string;
+  content_ne: string;
+  content_km: string;
+  content_tl: string;
   important: boolean;
-  content: Record<Lang, string>;
+  created_at: string;
 };
 
-const LANGUAGES: { code: Lang; label: string }[] = [
+const languages: { code: Lang; label: string }[] = [
   { code: "ko", label: "🇰🇷 한국어" },
   { code: "en", label: "🇺🇸 English" },
   { code: "ne", label: "🇳🇵 नेपाली" },
@@ -30,13 +35,20 @@ const TEXT = {
     newmaterial: "신소재생산팀",
     notice: "공지사항",
     admin: "관리자",
+    login: "관리자 로그인",
+    logout: "로그아웃",
     close: "닫기",
+    email: "이메일",
+    password: "비밀번호",
     add: "공지 등록",
-    submit: "공지 올리기",
-    placeholder: "한국어로 공지사항을 입력하세요.",
+    edit: "수정",
+    delete: "삭제",
+    save: "저장",
+    cancel: "취소",
+    important: "중요 공지",
     empty: "등록된 공지사항이 없습니다.",
-    menu: "메뉴",
-    warning: "새 공지는 임시 저장되며 자동 번역되지 않습니다.",
+    placeholder: "공지할 내용을 한국어로 입력하세요.",
+    warning: "자동 번역 연결 전에는 외국어 화면에 한국어 원문이 표시됩니다.",
   },
   en: {
     title: "SERIM B&G Production Management",
@@ -45,13 +57,20 @@ const TEXT = {
     newmaterial: "New Materials Production Team",
     notice: "Notices",
     admin: "Admin",
+    login: "Admin Login",
+    logout: "Logout",
     close: "Close",
-    add: "New Notice",
-    submit: "Post Notice",
-    placeholder: "Enter a notice in Korean.",
+    email: "Email",
+    password: "Password",
+    add: "Post Notice",
+    edit: "Edit",
+    delete: "Delete",
+    save: "Save",
+    cancel: "Cancel",
+    important: "Important",
     empty: "No notices have been posted.",
-    menu: "Menu",
-    warning: "New notices are temporary and not automatically translated.",
+    placeholder: "Enter the notice in Korean.",
+    warning: "New notices are shown in Korean until automatic translation is connected.",
   },
   ne: {
     title: "सेरिम बी एन्ड जी उत्पादन व्यवस्थापन",
@@ -60,13 +79,20 @@ const TEXT = {
     newmaterial: "नयाँ सामग्री उत्पादन टोली",
     notice: "सूचनाहरू",
     admin: "प्रशासक",
+    login: "प्रशासक लगइन",
+    logout: "लगआउट",
     close: "बन्द",
-    add: "नयाँ सूचना",
-    submit: "सूचना पोस्ट गर्नुहोस्",
-    placeholder: "कोरियाली भाषामा सूचना लेख्नुहोस्।",
+    email: "इमेल",
+    password: "पासवर्ड",
+    add: "सूचना थप्नुहोस्",
+    edit: "सम्पादन",
+    delete: "मेटाउनुहोस्",
+    save: "सुरक्षित गर्नुहोस्",
+    cancel: "रद्द",
+    important: "महत्त्वपूर्ण सूचना",
     empty: "कुनै सूचना छैन।",
-    menu: "मेनु",
-    warning: "नयाँ सूचनाहरू अस्थायी हुन् र स्वचालित रूपमा अनुवाद हुँदैनन्।",
+    placeholder: "कोरियाली भाषामा सूचना लेख्नुहोस्।",
+    warning: "स्वचालित अनुवाद उपलब्ध नभएसम्म नयाँ सूचना कोरियाली भाषामा देखिनेछ।",
   },
   km: {
     title: "ការគ្រប់គ្រងផលិតកម្ម SERIM B&G",
@@ -75,13 +101,20 @@ const TEXT = {
     newmaterial: "ក្រុមផលិតសម្ភារៈថ្មី",
     notice: "សេចក្តីជូនដំណឹង",
     admin: "អ្នកគ្រប់គ្រង",
+    login: "ចូលគណនីអ្នកគ្រប់គ្រង",
+    logout: "ចាកចេញ",
     close: "បិទ",
-    add: "ប្រកាសថ្មី",
-    submit: "បង្ហោះសេចក្តីជូនដំណឹង",
-    placeholder: "សូមបញ្ចូលសេចក្តីជូនដំណឹងជាភាសាកូរ៉េ។",
+    email: "អ៊ីមែល",
+    password: "ពាក្យសម្ងាត់",
+    add: "បង្ហោះសេចក្តីជូនដំណឹង",
+    edit: "កែប្រែ",
+    delete: "លុប",
+    save: "រក្សាទុក",
+    cancel: "បោះបង់",
+    important: "សេចក្តីជូនដំណឹងសំខាន់",
     empty: "មិនទាន់មានសេចក្តីជូនដំណឹងទេ។",
-    menu: "ម៉ឺនុយ",
-    warning: "សេចក្តីជូនដំណឹងថ្មីគឺបណ្តោះអាសន្ន និងមិនត្រូវបានបកប្រែដោយស្វ័យប្រវត្តិទេ។",
+    placeholder: "សូមសរសេរសេចក្តីជូនដំណឹងជាភាសាកូរ៉េ។",
+    warning: "សេចក្តីជូនដំណឹងថ្មីនឹងបង្ហាញជាភាសាកូរ៉េ រហូតដល់មានការបកប្រែដោយស្វ័យប្រវត្តិ។",
   },
   tl: {
     title: "SERIM B&G Pamamahala ng Produksyon",
@@ -90,52 +123,27 @@ const TEXT = {
     newmaterial: "New Materials Production Team",
     notice: "Mga Anunsyo",
     admin: "Admin",
+    login: "Admin Login",
+    logout: "Logout",
     close: "Isara",
-    add: "Bagong Anunsyo",
-    submit: "I-post ang Anunsyo",
-    placeholder: "Ilagay ang anunsyo sa wikang Korean.",
+    email: "Email",
+    password: "Password",
+    add: "Mag-post ng Anunsyo",
+    edit: "I-edit",
+    delete: "Burahin",
+    save: "I-save",
+    cancel: "Kanselahin",
+    important: "Mahalagang Anunsyo",
     empty: "Wala pang mga anunsyo.",
-    menu: "Menu",
-    warning: "Pansamantala lamang ang mga bagong anunsyo at hindi awtomatikong isinasalin.",
+    placeholder: "Isulat ang anunsyo sa Korean.",
+    warning: "Ipapakita muna sa Korean ang mga bagong anunsyo hanggang maikonekta ang awtomatikong pagsasalin.",
   },
 };
-
-const INITIAL_NOTICES: Notice[] = [
-  {
-    id: 1,
-    team: "newmaterial",
-    date: "2026-11-19",
-    important: true,
-    content: {
-      ko: "[★] 세림비앤지 생산본부 어플리케이션 실사용 테스트 중입니다. -최준혁 사원-",
-      en: "[★] The SERIM B&G Production Division application is currently undergoing real-world testing. - Employee Choi Jun-hyeok -",
-      ne: "[★] सेरिम बी एन्ड जी उत्पादन विभागको एप्लिकेसन हाल वास्तविक प्रयोगको परीक्षणमा छ। - कर्मचारी चोई जुन-ह्योक -",
-      km: "[★] កម្មវិធីរបស់ផ្នែកផលិតកម្ម SERIM B&G កំពុងស្ថិតក្នុងការសាកល្បងប្រើប្រាស់ជាក់ស្តែង។ - បុគ្គលិក Choi Jun-hyeok -",
-      tl: "[★] Kasalukuyang sinusubukan sa aktuwal na paggamit ang aplikasyon ng Dibisyon ng Produksyon ng SERIM B&G. - Empleyadong Choi Jun-hyeok -",
-    },
-  },
-  {
-    id: 2,
-    team: "newmaterial",
-    date: "2026-11-19",
-    important: false,
-    content: {
-      ko: "[공지사항] 금일 10:00시 [마니커 거래업체]에서 방문할 예정이오니, 작업자분들은 복장검토 및 2중 위생모, 마스크를 착용해주시길 바랍니다.",
-      en: "[NOTICE] A representative from Maniker, our business partner, is scheduled to visit today at 10:00 AM. All workers are requested to check their work attire and wear double hairnets and a face mask.",
-      ne: "[सूचना] आज बिहान १०:०० बजे हाम्रो व्यापारिक साझेदार मानिकेर (Maniker) का प्रतिनिधि भ्रमणमा आउने कार्यक्रम छ। सबै कामदारहरूले आफ्नो काम गर्ने पोसाक जाँच गरी दुई तहको हेयरनेट र मास्क लगाउनुहोस्।",
-      km: "[សេចក្តីជូនដំណឹង] តំណាងក្រុមហ៊ុនដៃគូពាណិជ្ជកម្ម Maniker គ្រោងនឹងមកទស្សនកិច្ចនៅថ្ងៃនេះ វេលាម៉ោង ១០:០០ ព្រឹក។ សូមកម្មករទាំងអស់ពិនិត្យសម្លៀកបំពាក់ការងារ និងពាក់មួកគ្របសក់អនាម័យពីរជាន់ ព្រមទាំងម៉ាស់។",
-      tl: "[PAUNAWA] Nakatakdang bumisita ngayong araw sa ganap na 10:00 AM ang kinatawan ng ating kasosyong kumpanya na Maniker. Hinihiling sa lahat ng manggagawa na suriin ang kanilang kasuotan sa trabaho at magsuot ng dalawang patong ng hairnet at face mask.",
-    },
-  },
-];
 
 export default function Home() {
   const [lang, setLang] = useState<Lang>("ko");
   const [team, setTeam] = useState<Team>("newmaterial");
-  const [notices, setNotices] =
-    useState<Notice[]>(INITIAL_NOTICES);
-  const [inputText, setInputText] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [notices, setNotices] = useState<Notice[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [divisionOpen, setDivisionOpen] = useState(true);
   const [openTeams, setOpenTeams] = useState<Record<Team, boolean>>({
@@ -143,44 +151,217 @@ export default function Home() {
     newmaterial: true,
   });
 
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [inputText, setInputText] = useState("");
+  const [important, setImportant] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+
   const t = TEXT[lang];
+
+  const loadNotices = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("notices")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setMessage("공지 조회 오류: " + error.message);
+    } else {
+      setNotices((data ?? []) as Notice[]);
+    }
+    setLoading(false);
+  }, []);
+
+  const checkAdmin = useCallback(async () => {
+    const { data: userData } = await supabase.auth.getUser();
+
+    if (!userData.user) {
+      setIsAdmin(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("admin_users")
+      .select("user_id")
+      .eq("user_id", userData.user.id)
+      .maybeSingle();
+
+    setIsAdmin(!error && !!data);
+  }, []);
+
+  useEffect(() => {
+    void loadNotices();
+    void checkAdmin();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      () => {
+        void checkAdmin();
+      }
+    );
+
+    const interval = window.setInterval(() => {
+      void loadNotices();
+    }, 15000);
+
+    return () => {
+      listener.subscription.unsubscribe();
+      window.clearInterval(interval);
+    };
+  }, [loadNotices, checkAdmin]);
+
+  const login = async () => {
+    if (!email.trim() || !password) {
+      setMessage("이메일과 비밀번호를 입력해 주세요.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (error || !data.user) {
+      setMessage("로그인 실패: 이메일 또는 비밀번호를 확인해 주세요.");
+      setBusy(false);
+      return;
+    }
+
+    const { data: admin, error: roleError } = await supabase
+      .from("admin_users")
+      .select("user_id")
+      .eq("user_id", data.user.id)
+      .maybeSingle();
+
+    if (roleError || !admin) {
+      await supabase.auth.signOut();
+      setIsAdmin(false);
+      setMessage("관리자 권한이 없는 계정입니다.");
+      setBusy(false);
+      return;
+    }
+
+    setIsAdmin(true);
+    setShowLogin(false);
+    setPassword("");
+    setMessage("관리자로 로그인했습니다.");
+    setBusy(false);
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setIsAdmin(false);
+    setEditingId(null);
+    setInputText("");
+    setMessage("로그아웃했습니다.");
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setInputText("");
+    setImportant(false);
+  };
+
+  const saveNotice = async () => {
+    if (!isAdmin || !inputText.trim() || busy) return;
+
+    setBusy(true);
+    setMessage("");
+
+    const content = inputText.trim();
+
+    // 번역 연동 전에는 한국어 원문으로 저장
+    const fields = {
+      content_ko: content,
+      content_en: content,
+      content_ne: content,
+      content_km: content,
+      content_tl: content,
+      important,
+      updated_at: new Date().toISOString(),
+    };
+
+    const result = editingId !== null
+      ? await supabase
+          .from("notices")
+          .update(fields)
+          .eq("id", editingId)
+          .select("id")
+      : await supabase
+          .from("notices")
+          .insert({ ...fields, team })
+          .select("id");
+
+    if (result.error) {
+      setMessage("저장 실패: " + result.error.message);
+    } else if (!result.data?.length) {
+      setMessage("저장 권한이 없거나 대상 공지를 찾을 수 없습니다.");
+    } else {
+      resetForm();
+      setMessage("공지사항이 저장되었습니다.");
+      await loadNotices();
+    }
+
+    setBusy(false);
+  };
+
+  const startEdit = (notice: Notice) => {
+    setEditingId(notice.id);
+    setInputText(notice.content_ko);
+    setImportant(notice.important);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const deleteNotice = async (id: number) => {
+    if (!isAdmin || busy) return;
+
+    if (!window.confirm("공지사항을 삭제하시겠습니까?")) {
+      return;
+    }
+
+    setBusy(true);
+    setMessage("");
+
+    const { data, error } = await supabase
+      .from("notices")
+      .delete()
+      .eq("id", id)
+      .select("id");
+
+    if (error) {
+      setMessage("삭제 실패: " + error.message);
+    } else if (!data?.length) {
+      setMessage("삭제 권한이 없거나 해당 공지가 없습니다.");
+    } else {
+      if (editingId === id) resetForm();
+      setMessage("공지사항이 삭제되었습니다.");
+      await loadNotices();
+    }
+
+    setBusy(false);
+  };
+
+  const selectTeam = (selected: Team) => {
+    setTeam(selected);
+    setMenuOpen(false);
+    resetForm();
+  };
 
   const teamNotices = notices.filter(
     (notice) => notice.team === team
   );
 
-  const selectTeam = (selectedTeam: Team) => {
-    setTeam(selectedTeam);
-    setIsAdmin(false);
-    setMenuOpen(false);
-  };
-
-  const handleAddNotice = () => {
-    if (!inputText.trim()) return;
-
-    const today = new Date();
-    const date = [
-      today.getFullYear(),
-      String(today.getMonth() + 1).padStart(2, "0"),
-      String(today.getDate()).padStart(2, "0"),
-    ].join("-");
-
-    const newEntry: Notice = {
-      id: Date.now(),
-      team,
-      date,
-      important: true,
-      content: {
-        ko: inputText,
-        en: `[Translation pending] ${inputText}`,
-        ne: `[अनुवाद बाँकी छ] ${inputText}`,
-        km: `[កំពុងរង់ចាំការបកប្រែ] ${inputText}`,
-        tl: `[Naghihintay ng pagsasalin] ${inputText}`,
-      },
-    };
-
-    setNotices((prev) => [newEntry, ...prev]);
-    setInputText("");
+  const getContent = (notice: Notice) => {
+    const key = `content_${lang}` as keyof Notice;
+    return String(notice[key] || notice.content_ko);
   };
 
   const sidebar = (
@@ -195,7 +376,7 @@ export default function Home() {
       <nav className="flex-1 p-3">
         <button
           onClick={() => setDivisionOpen(!divisionOpen)}
-          className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left font-bold hover:bg-blue-800"
+          className="flex w-full justify-between rounded-lg px-3 py-3 text-left font-bold hover:bg-blue-800"
         >
           <span>▣ {t.division}</span>
           <span>{divisionOpen ? "▾" : "▸"}</span>
@@ -203,58 +384,51 @@ export default function Home() {
 
         {divisionOpen && (
           <div className="mt-2 space-y-2 pl-2">
-            {(["vacuum", "newmaterial"] as Team[]).map(
-              (item) => (
-                <div key={item}>
-                  <button
-                    onClick={() =>
-                      setOpenTeams((prev) => ({
-                        ...prev,
-                        [item]: !prev[item],
-                      }))
-                    }
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-blue-800"
-                  >
-                    <span>{t[item]}</span>
-                    <span>{openTeams[item] ? "▾" : "▸"}</span>
-                  </button>
+            {(["vacuum", "newmaterial"] as Team[]).map((item) => (
+              <div key={item}>
+                <button
+                  onClick={() => setOpenTeams((prev) => ({
+                    ...prev,
+                    [item]: !prev[item],
+                  }))}
+                  className="flex w-full justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-blue-800"
+                >
+                  <span>{t[item]}</span>
+                  <span>{openTeams[item] ? "▾" : "▸"}</span>
+                </button>
 
-                  {openTeams[item] && (
-                    <button
-                      onClick={() => selectTeam(item)}
-                      className={`ml-3 mt-1 w-[calc(100%-12px)] rounded-lg px-3 py-2 text-left text-sm transition ${
-                        team === item
-                          ? "bg-white font-bold text-blue-900"
-                          : "bg-[#315B88] text-white hover:bg-blue-600"
-                      }`}
-                    >
-                      • {t.notice}
-                    </button>
-                  )}
-                </div>
-              )
-            )}
+                {openTeams[item] && (
+                  <button
+                    onClick={() => selectTeam(item)}
+                    className={`ml-3 mt-1 w-[calc(100%-12px)] rounded-lg px-3 py-2 text-left text-sm ${
+                      team === item
+                        ? "bg-white font-bold text-blue-900"
+                        : "bg-[#315B88] text-white hover:bg-blue-600"
+                    }`}
+                  >
+                    • {t.notice}
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </nav>
-
-      <div className="border-t border-blue-800 p-4 text-xs text-blue-200">
-        © SERIM B&G
-      </div>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900">
       {menuOpen && (
-        <div
+        <button
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
           onClick={() => setMenuOpen(false)}
+          aria-label="Close menu"
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 transition-transform md:translate-x-0 ${
           menuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -265,9 +439,9 @@ export default function Home() {
         <header className="sticky top-0 z-30 bg-blue-700 p-4 text-white shadow-md">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="rounded-lg bg-blue-800 px-3 py-2 md:hidden"
-              aria-label={t.menu}
+              onClick={() => setMenuOpen(true)}
+              className="rounded bg-blue-800 px-3 py-2 md:hidden"
+              aria-label="Open menu"
             >
               ☰
             </button>
@@ -276,23 +450,32 @@ export default function Home() {
               {t.title}
             </h1>
 
-            <button
-              onClick={() => setIsAdmin(!isAdmin)}
-              className="shrink-0 rounded bg-blue-900 px-3 py-2 text-xs"
-            >
-              {isAdmin ? t.close : t.admin}
-            </button>
+            {isAdmin ? (
+              <button
+                onClick={logout}
+                className="rounded bg-blue-900 px-3 py-2 text-xs"
+              >
+                {t.logout}
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowLogin(!showLogin)}
+                className="rounded bg-blue-900 px-3 py-2 text-xs"
+              >
+                {showLogin ? t.close : t.admin}
+              </button>
+            )}
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {LANGUAGES.map((language) => (
+            {languages.map((language) => (
               <button
                 key={language.code}
                 onClick={() => setLang(language.code)}
-                className={`rounded px-2 py-2 text-xs font-semibold transition ${
+                className={`rounded px-2 py-2 text-xs font-semibold ${
                   lang === language.code
-                    ? "bg-white text-blue-800 shadow"
-                    : "bg-blue-600 text-blue-100 hover:bg-blue-500"
+                    ? "bg-white text-blue-800"
+                    : "bg-blue-600 text-blue-100"
                 }`}
               >
                 {language.label}
@@ -302,6 +485,49 @@ export default function Home() {
         </header>
 
         <main className="mx-auto max-w-4xl p-4 sm:p-6">
+          {message && (
+            <div
+              role="status"
+              className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"
+            >
+              {message}
+            </div>
+          )}
+
+          {showLogin && !isAdmin && (
+            <div className="mb-5 rounded-xl bg-white p-5 shadow">
+              <h2 className="mb-3 font-bold">{t.login}</h2>
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                void login();
+              }}>
+                <input
+                  type="email"
+                  autoComplete="username"
+                  placeholder={t.email}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="mb-3 w-full rounded-lg border p-3"
+                />
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder={t.password}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="mb-3 w-full rounded-lg border p-3"
+                />
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="rounded-lg bg-blue-700 px-5 py-3 text-white disabled:opacity-50"
+                >
+                  {t.login}
+                </button>
+              </form>
+            </div>
+          )}
+
           <div className="mb-4 text-sm text-gray-500">
             {t.division} / {t[team]} / {t.notice}
           </div>
@@ -316,39 +542,64 @@ export default function Home() {
           </div>
 
           {isAdmin && (
-            <div className="mb-5 rounded-xl border border-blue-200 bg-white p-4 shadow-sm">
+            <div className="mb-5 rounded-xl border border-blue-200 bg-white p-5 shadow-sm">
               <h3 className="mb-3 font-bold text-blue-800">
-                {t.add} - {t[team]}
+                {editingId !== null ? t.edit : t.add}
               </h3>
 
               <textarea
-                rows={4}
+                rows={5}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder={t.placeholder}
-                className="w-full rounded-lg border p-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border p-3 text-sm"
               />
 
-              <p className="mt-2 text-xs text-orange-700">
+              <label className="mt-3 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={important}
+                  onChange={(e) => setImportant(e.target.checked)}
+                />
+                {t.important}
+              </label>
+
+              <p className="mt-3 text-xs text-orange-700">
                 {t.warning}
               </p>
 
-              <button
-                onClick={handleAddNotice}
-                className="mt-3 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
-              >
-                {t.submit}
-              </button>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={saveNotice}
+                  disabled={busy || !inputText.trim()}
+                  className="rounded-lg bg-blue-700 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+                >
+                  {editingId !== null ? t.save : t.add}
+                </button>
+
+                {editingId !== null && (
+                  <button
+                    onClick={resetForm}
+                    className="rounded-lg border px-5 py-2.5 text-sm"
+                  >
+                    {t.cancel}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
-          <div className="space-y-4">
-            {teamNotices.length === 0 ? (
-              <div className="rounded-xl bg-white p-10 text-center text-gray-500 shadow-sm">
-                {t.empty}
-              </div>
-            ) : (
-              teamNotices.map((notice) => (
+          {loading ? (
+            <div className="rounded-xl bg-white p-8 text-center">
+              공지사항 불러오는 중...
+            </div>
+          ) : teamNotices.length === 0 ? (
+            <div className="rounded-xl bg-white p-8 text-center text-gray-500">
+              {t.empty}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {teamNotices.map((notice) => (
                 <article
                   key={notice.id}
                   className={`rounded-xl border-l-4 bg-white p-5 shadow-sm ${
@@ -359,9 +610,8 @@ export default function Home() {
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <span className="text-xs text-gray-400">
-                      {notice.date}
+                      {new Date(notice.created_at).toLocaleDateString("ko-KR")}
                     </span>
-
                     {notice.important && (
                       <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-600">
                         IMPORTANT
@@ -369,13 +619,31 @@ export default function Home() {
                     )}
                   </div>
 
-                  <p className="whitespace-pre-line text-sm leading-7 text-gray-800 sm:text-base">
-                    {notice.content[lang]}
+                  <p className="whitespace-pre-line text-sm leading-7 sm:text-base">
+                    {getContent(notice)}
                   </p>
+
+                  {isAdmin && (
+                    <div className="mt-4 flex justify-end gap-2 border-t pt-3">
+                      <button
+                        onClick={() => startEdit(notice)}
+                        className="rounded-lg border px-4 py-2 text-sm"
+                      >
+                        {t.edit}
+                      </button>
+                      <button
+                        onClick={() => deleteNotice(notice.id)}
+                        disabled={busy}
+                        className="rounded-lg border border-red-300 px-4 py-2 text-sm text-red-600 disabled:opacity-50"
+                      >
+                        {t.delete}
+                      </button>
+                    </div>
+                  )}
                 </article>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </main>
       </div>
     </div>
