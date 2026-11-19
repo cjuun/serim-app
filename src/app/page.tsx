@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import AttendanceManager from "./AttendanceManager";
+import ShiftRoster from "./ShiftRoster";
 
 type Lang = "ko" | "en" | "ne" | "km" | "tl";
 type Team = "vacuum" | "newmaterial";
@@ -1008,6 +1009,11 @@ const renderCalendar = () => {
   renderNoticePage()
 ) : page === "attendance" ? (
   <AttendanceManager
+    team={team}
+    isAdmin={isAdmin}
+  />
+) : page === "shift" ? (
+  <ShiftRoster
     team={team}
     isAdmin={isAdmin}
   />
