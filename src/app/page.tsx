@@ -1048,11 +1048,13 @@ const renderCalendar = () => {
   <AttendanceManager
     team={team}
     isAdmin={isAdmin}
+    lang={lang}
   />
 ) : page === "shift" ? (
   <ShiftRoster
     team={team}
     isAdmin={isAdmin}
+    lang={lang}
   />
 ) : (
   renderPlaceholder()
