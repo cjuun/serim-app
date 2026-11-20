@@ -1,9 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {createClient} from '@supabase/supabase-js';
 
-export const runtime='nodejs';
-export const dynamic='force-dynamic';
-
 const languages=['en','ne','km','tl','vi'] as const;
 type Translation={en:string;ne:string;km:string;tl:string;vi:string};
 
