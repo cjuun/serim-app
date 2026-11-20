@@ -17,7 +17,7 @@ export default function StaffPortal({lang}:{lang:Lang}){
   const [suggestions,setSuggestions]=useState<Suggestion[]>([]);
   const [leaveType,setLeaveType]=useState<string>('annual');const [start,setStart]=useState('');const [end,setEnd]=useState('');
   const [reason,setReason]=useState('');const [category,setCategory]=useState('workplace');const [body,setBody]=useState('');
-  const [newPassword,setNewPassword]=useState('');const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [loading,setLoading]=useState(true);
+  const [alias,setAlias]=useState('');const [newPassword,setNewPassword]=useState('');const [busy,setBusy]=useState(false);const [message,setMessage]=useState('');const [loading,setLoading]=useState(true);
   useEffect(()=>{const d=new Date();const today=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');setStart(today);setEnd(today);},[]);
   const load=useCallback(async()=>{
     const {data:user}=await supabase.auth.getUser();
@@ -44,9 +44,14 @@ export default function StaffPortal({lang}:{lang:Lang}){
   };
   const logout=async()=>{await supabase.auth.signOut();setMember(null);setMessage('');};
   const changePassword=async()=>{
-    if(newPassword.length<12){setMessage(s(lang,'passwordMin'));return;}
+    if(newPassword.length<8){setMessage(s(lang,'passwordMin'));return;}
     setBusy(true);const {error}=await supabase.auth.updateUser({password:newPassword});setBusy(false);
     setMessage(error?error.message:s(lang,'passwordChanged'));if(!error)setNewPassword('');
+  };
+  const saveAlias=async()=>{
+    setBusy(true);setMessage('');
+    const {data,error}=await supabase.rpc('set_staff_login_alias',{p_alias:alias.trim().toLowerCase()});
+    setBusy(false);setMessage(error?error.message:`새 로그인 아이디: ${data} (기존 직원번호 로그인도 유지됩니다)`);
   };
   const submitLeave=async()=>{
     if(!member||busy)return;
@@ -77,7 +82,8 @@ export default function StaffPortal({lang}:{lang:Lang}){
   return <div className="space-y-4">
     <div className={card}><div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-bold text-[#145C42]">{member.full_name}</h2><p className="text-sm text-gray-500">{member.employee_code} · {t(lang,member.team)}</p></div><button onClick={logout} className="rounded-lg border px-3 py-2 text-sm">{t(lang,'logout')}</button></div></div>
     {message&&<div className={card} role="status">{message}</div>}
-    <section className={card}><h3 className="mb-2 font-bold">{s(lang,'changePassword')}</h3><div className="flex flex-wrap gap-2"><input type="password" autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className={`${input} flex-1`} placeholder={s(lang,'newPassword')}/><button disabled={busy||newPassword.length<12} className="rounded-lg bg-[#168253] px-4 py-2 text-sm font-bold text-white disabled:opacity-40" onClick={changePassword}>{t(lang,'save')}</button></div></section>
+    <section className={card}><h3 className="mb-2 font-bold">{({ko:'로그인 아이디 변경',en:'Change login ID',ne:'लगइन आईडी परिवर्तन',km:'ប្តូរឈ្មោះចូល',tl:'Palitan ang login ID',vi:'Đổi tên đăng nhập'} as Record<Lang,string>)[lang]}</h3><p className="mb-2 text-xs text-gray-500">5~24 English letters/digits/_ · first character must be a letter. Permanent SR number remains valid.</p><div className="flex gap-2"><input value={alias} onChange={e=>setAlias(e.target.value)} className={input} maxLength={24} placeholder="myserimid"/><button disabled={busy||!(/^[a-z][a-z0-9_]{4,23}$/i.test(alias))} className="rounded-lg bg-[#168253] px-4 py-2 text-white disabled:opacity-40" onClick={saveAlias}>{t(lang,'save')}</button></div></section>
+    <section className={card}><h3 className="mb-2 font-bold">{s(lang,'changePassword')}</h3><div className="flex flex-wrap gap-2"><input type="password" autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} className={`${input} flex-1`} placeholder={s(lang,'newPassword')}/><button disabled={busy||newPassword.length<8} className="rounded-lg bg-[#168253] px-4 py-2 text-sm font-bold text-white disabled:opacity-40" onClick={changePassword}>{t(lang,'save')}</button></div></section>
     <section className={card}><h3 className="mb-3 text-lg font-bold text-[#145C42]">{s(lang,'applyLeave')}</h3>
       <label className="block text-sm">{s(lang,'leaveType')}</label><select className={input} value={leaveType} onChange={e=>{setLeaveType(e.target.value);if(['am_half','pm_half'].includes(e.target.value))setEnd(start);}}>{types.map(x=><option key={x} value={x}>{t(lang,x)}</option>)}</select>
       <div className="mt-3 grid grid-cols-2 gap-2"><label className="text-sm">{s(lang,'startDate')}<input type="date" className={input} value={start} onChange={e=>{setStart(e.target.value);if(['am_half','pm_half'].includes(leaveType))setEnd(e.target.value);}}/></label><label className="text-sm">{s(lang,'endDate')}<input type="date" className={input} value={end} min={start} disabled={['am_half','pm_half'].includes(leaveType)} onChange={e=>setEnd(e.target.value)}/></label></div>
