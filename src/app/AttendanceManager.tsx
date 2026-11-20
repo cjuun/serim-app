@@ -55,6 +55,15 @@ export default function AttendanceManager({team,isAdmin,lang}:{team:Team;isAdmin
   },[isAdmin,confirmed,assignments,records,shift]);
   visible.sort((a,b)=>people.findIndex(x=>x.name===a.name)-people.findIndex(x=>x.name===b.name));
   const allChecked=assignments.length===people.length && assignments.every(x=>!!statuses[x.employee_name]);
+  const markAllPresent=()=>{
+    if(!isAdmin||confirmed||busy)return;
+    // Do not overwrite leave/half-day selections or approved leave records.
+    setStatuses(prev=>{
+      const next={...prev};
+      assignments.forEach(row=>{if(!next[row.employee_name])next[row.employee_name]='present';});
+      return next;
+    });
+  };
   const save=async(finalize:boolean)=>{
     if(!isAdmin||busy||confirmed||!date)return;
     if(assignments.length!==people.length){setMessage(t(lang,'missingPeople'));return;}
@@ -110,6 +119,7 @@ export default function AttendanceManager({team,isAdmin,lang}:{team:Team;isAdmin
     <div className={`${cls} flex items-center justify-between`}><b>{t(lang,team)}</b><span className="text-sm">{t(lang,confirmed?'confirmed':'unconfirmed')}</span></div>
     {loading?<div className={cls}>{t(lang,'loading')}</div>:!isAdmin&&!confirmed?<div className={cls}>{t(lang,'notPublished')}</div>:<>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">{statusKeys.map(s=><div className="rounded-lg bg-white p-2 text-center shadow-sm" key={s}><div className="text-xl font-bold text-[#168253]">{visible.filter(e=>statuses[e.name]===s).length}</div><div className="text-xs">{t(lang,s)}</div></div>)}</div>
+      {isAdmin&&!confirmed&&<button onClick={markAllPresent} disabled={busy||assignments.length===0} className="w-full rounded-xl border border-[#168253] bg-[#E3F5E9] p-3 text-sm font-bold text-[#145C42] disabled:opacity-50">✓ {({ko:'미체크 인원 전원 출근처리',en:'Mark all unchecked as present',ne:'सबै जाँच नभएकालाई उपस्थित',km:'កំណត់អ្នកមិនទាន់ធីកថាមកធ្វើការ',tl:'Markahan ang lahat ng hindi pa na-check bilang pumasok',vi:'Đánh dấu đi làm cho tất cả người chưa kiểm tra'} as Record<Lang,string>)[lang]}</button>}
       {group('operator')}{group('worker')}
       {isAdmin&&<div className="sticky bottom-3 rounded-xl border border-green-200 bg-white p-4 shadow-lg"><div className="mb-2 text-sm">{t(lang,'progress')}: {assignments.filter(x=>statuses[x.employee_name]).length} / {people.length} {t(lang,'people')}</div>
         {confirmed?<button disabled={busy} onClick={reopen} className="w-full rounded-lg border border-orange-400 p-3 font-bold text-orange-700">{t(lang,'reopen')}</button>:<div className="grid grid-cols-2 gap-2"><button disabled={busy||assignments.length!==people.length} onClick={()=>save(false)} className="rounded-lg border border-[#168253] p-3 font-bold text-[#168253] disabled:opacity-40">{t(lang,'savedTemp')}</button><button disabled={busy||!allChecked} onClick={()=>save(true)} className="rounded-lg bg-[#168253] p-3 font-bold text-white disabled:opacity-40">{t(lang,'confirmAttendance')}</button></div>}
