@@ -2,8 +2,8 @@ import type {Lang} from './i18n';
 const order:Lang[]=['ko','en','ne','km','tl','vi'];
 const words:Record<string,[string,string,string,string,string,string]>={
   changePassword:['비밀번호 변경','Change password','पासवर्ड परिवर्तन','ប្តូរពាក្យសម្ងាត់','Palitan ang password','Đổi mật khẩu'],
-  newPassword:['새 비밀번호 (12자 이상)','New password (12+ chars)','नयाँ पासवर्ड (१२+ वर्ण)','ពាក្យសម្ងាត់ថ្មី (១២+ តួ)','Bagong password (12+ karakter)','Mật khẩu mới (12+ ký tự)'],
-  passwordMin:['비밀번호는 12자 이상으로 설정하세요.','Use at least 12 characters.','कम्तीमा १२ अक्षर प्रयोग गर्नुहोस्।','ប្រើយ៉ាងតិច ១២ តួអក្សរ។','Gumamit ng 12 karakter pataas.','Dùng ít nhất 12 ký tự.'],
+  newPassword:['새 비밀번호 (8자 이상)','New password (8+ chars)','नयाँ पासवर्ड (८+ वर्ण)','ពាក្យសម្ងាត់ថ្មី (៨+ តួ)','Bagong password (8+ karakter)','Mật khẩu mới (8+ ký tự)'],
+  passwordMin:['비밀번호는 8자 이상으로 설정하세요.','Use at least 8 characters.','कम्तीमा ८ अक्षर प्रयोग गर्नुहोस्।','ប្រើយ៉ាងតិច ៨ តួអក្សរ។','Gumamit ng 8 karakter pataas.','Dùng ít nhất 8 ký tự.'],
   passwordChanged:['비밀번호가 변경되었습니다.','Password changed.','पासवर्ड परिवर्तन भयो।','បានប្តូរពាក្យសម្ងាត់។','Napalitan ang password.','Đã đổi mật khẩu.'],
   adminIntro:['직원 추가 후 계정을 발급하세요. 직원번호는 자동 생성됩니다.','Add staff, then issue their login. IDs are automatic.','कर्मचारी थपेर लगइन दिनुहोस्। आईडी आफै बन्छ।','បន្ថែមបុគ្គលិក រួចចេញគណនី។ លេខបង្កើតដោយស្វ័យប្រវត្តិ។','Magdagdag ng empleyado at gumawa ng account.','Thêm nhân viên rồi cấp tài khoản, mã được tạo tự động.'],
   processed:['처리되었습니다.','Completed.','पूरा भयो।','បានបញ្ចប់។','Nakumpleto.','Đã xử lý.'],
