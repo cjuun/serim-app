@@ -8,10 +8,14 @@ import AttendanceReport from './AttendanceReport';
 import TodayDashboard from './TodayDashboard';
 import StaffPortal from './StaffPortal';
 import StaffAdmin from './StaffAdmin';
+import OrganizationChart from './OrganizationChart';
+import CustomerClaims from './CustomerClaims';
+import NewMaterialRoster from './NewMaterialRoster';
+import SupervisorAdmin from './SupervisorAdmin';
 import {s} from './staffText';
 import {languages,t,type Lang,type Team,type Key} from './i18n';
 
-type Page='dashboard'|'calendar'|'notice'|'attendance'|'shift'|'reports'|'staffportal'|'staffadmin';
+type Page='dashboard'|'calendar'|'notice'|'attendance'|'shift'|'reports'|'staffportal'|'staffadmin'|'organization'|'claims';
 type Notice={id:number;team:Team;content_ko:string;content_en:string|null;content_ne:string|null;content_km:string|null;content_tl:string|null;content_vi:string|null;important:boolean;created_at:string};
 type Translated={en:string;ne:string;km:string;tl:string;vi:string};
 const button='rounded-lg bg-[#168253] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40';
@@ -22,6 +26,11 @@ export default function Home(){
   const [team,setTeam]=useState<Team>('vacuum');
   const [notices,setNotices]=useState<Notice[]>([]);
   const [isAdmin,setIsAdmin]=useState(false);
+  const [authReady,setAuthReady]=useState(false);
+  const [signedIn,setSignedIn]=useState(false);
+  const [isSupervisor,setIsSupervisor]=useState(false);
+  const [staffCode,setStaffCode]=useState('');
+  const [loginType,setLoginType]=useState<'staff'|'admin'>('staff');
   const [showLogin,setShowLogin]=useState(false);
   const [email,setEmail]=useState('');
   const [password,setPassword]=useState('');
@@ -48,9 +57,12 @@ export default function Home(){
   },[lang]);
   const checkAdmin=useCallback(async()=>{
     const {data}=await supabase.auth.getUser();
-    if(!data.user){setIsAdmin(false);return;}
+    if(!data.user){setIsAdmin(false);setIsSupervisor(false);setSignedIn(false);setAuthReady(true);return;}
+    setSignedIn(true);
     const {data:admin,error}=await supabase.from('admin_users').select('user_id').eq('user_id',data.user.id).maybeSingle();
-    setIsAdmin(!error&&!!admin);
+    const isChief=!error&&!!admin;setIsAdmin(isChief);
+    const {data:supervisor}=await supabase.from('production_supervisors').select('user_id').eq('user_id',data.user.id).maybeSingle();
+    setIsSupervisor(!!supervisor);if(!isChief&&!supervisor)setPage('staffportal');setAuthReady(true);
   },[]);
   useEffect(()=>{
     void loadNotices();void checkAdmin();
@@ -63,15 +75,36 @@ export default function Home(){
     const {data,error}=await supabase.auth.signInWithPassword({email:email.trim(),password});
     if(error||!data.user){setMessage(`${t(lang,'fail')}: ${error?.message||t(lang,'loginRequired')}`);setBusy(false);return;}
     const {data:admin,error:roleError}=await supabase.from('admin_users').select('user_id').eq('user_id',data.user.id).maybeSingle();
-    if(roleError||!admin){await supabase.auth.signOut();setMessage(t(lang,'loginRequired'));setIsAdmin(false);}else{
-      setIsAdmin(true);setShowLogin(false);setPassword('');setMessage('');
+    const {data:supervisor}=await supabase.from('production_supervisors').select('user_id').eq('user_id',data.user.id).maybeSingle();
+    if((roleError||!admin)&&!supervisor){await supabase.auth.signOut();setMessage(t(lang,'loginRequired'));setIsAdmin(false);}else{
+      setIsSupervisor(!!supervisor);setIsAdmin(!!admin);setSignedIn(true);setPage('dashboard');setShowLogin(false);setPassword('');setMessage('');
     }
     setBusy(false);
+  };
+  const employeeLogin=async()=>{
+    const identifier=staffCode.trim();
+    setBusy(true);setMessage('');
+    if(!/^SR[0-9]{4,}$/i.test(identifier) && !/^[a-z][a-z0-9_]{4,23}$/i.test(identifier)){
+      setMessage('직원번호 또는 변경한 로그인 아이디를 확인해 주세요.');setBusy(false);return;
+    }
+    if(/^SR[0-9]{4,}$/i.test(identifier)){
+      const {error}=await supabase.auth.signInWithPassword({email:`${identifier.toLowerCase()}@staff.serimbng.example.com`,password});
+      if(error){setMessage('아이디 또는 비밀번호가 맞지 않습니다.');setBusy(false);return;}
+    }else{
+      try{
+        const res=await fetch('/api/staff-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({identifier,password})});
+        const json=await res.json() as {access_token?:string;refresh_token?:string;error?:string};
+        if(!res.ok||!json.access_token||!json.refresh_token)throw new Error('로그인 정보가 맞지 않습니다.');
+        const {error}=await supabase.auth.setSession({access_token:json.access_token,refresh_token:json.refresh_token});
+        if(error)throw error;
+      }catch{setMessage('아이디 또는 비밀번호가 맞지 않습니다.');setBusy(false);return;}
+    }
+    setSignedIn(true);setIsAdmin(false);setPage('staffportal');setPassword('');setBusy(false);
   };
   const logout=async()=>{
     const {error}=await supabase.auth.signOut();
     if(error){setMessage(`${t(lang,'fail')}: ${error.message}`);return;}
-    setIsAdmin(false);setEditId(null);setInput('');setMessage('');
+    setIsAdmin(false);setIsSupervisor(false);setSignedIn(false);setEditId(null);setInput('');setMessage('');
   };
   const nav=(target:Page,selected?:Team)=>{
     if(selected)setTeam(selected);
@@ -140,9 +173,11 @@ export default function Home(){
     {isAdmin&&<div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-3"><button onClick={()=>retran(n)} disabled={busy} className="rounded-lg border px-3 py-2 text-xs">🌐 {t(lang,'retranslate')}</button><button onClick={()=>editNotice(n)} className="rounded-lg border px-3 py-2 text-xs">{t(lang,'edit')}</button><button disabled={busy} onClick={()=>deleteNotice(n)} className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-700">{t(lang,'remove')}</button></div>}
   </article>;
   const sidebarButton=(label:string,active:boolean,fn:()=>void)=><button onClick={fn} className={`w-full rounded-lg px-3 py-2.5 text-left text-sm ${active?'bg-white font-bold text-[#145C42]':'text-[#E0F4E8] hover:bg-[#267553]'}`}>{label}</button>;
-  const sidebar=<div className="flex h-full flex-col bg-[#145C42] text-white"><div className="border-b border-[#34785B] p-5"><div className="text-xl font-black">🌿 SERIM B&G</div><p className="text-xs text-[#C5E8D2]">Eco-friendly Production System</p></div><nav className="flex-1 space-y-2 overflow-y-auto p-3">
+  const sidebar=<div className="flex h-full flex-col bg-[#145C42] text-white"><div className="border-b border-[#34785B] p-5"><div className="flex items-center gap-2"><span className="text-2xl">✦</span><div className="text-lg font-semibold tracking-[0.16em]" style={{fontFamily:'Arial, sans-serif'}}>SERIM <span className="font-normal">B&G</span></div></div><p className="text-xs text-[#C5E8D2]">Eco-friendly Production System</p></div><nav className="flex-1 space-y-2 overflow-y-auto p-3">
     {sidebarButton(`▦ ${t(lang,'dashboard')}`,page==='dashboard',()=>nav('dashboard'))}
     {sidebarButton(`▣ ${t(lang,'calendar')}`,page==='calendar',()=>nav('calendar'))}
+    {sidebarButton('▤ '+(lang==='ko'?'생산본부 조직도':'Organization'),page==='organization',()=>nav('organization'))}
+    {sidebarButton('▤ '+(lang==='ko'?'고객사 클레임':'Customer complaints'),page==='claims',()=>nav('claims'))}
     {sidebarButton(`♙ ${s(lang,'staffPortal')}`,page==='staffportal',()=>nav('staffportal'))}
     {isAdmin&&sidebarButton(`▤ ${s(lang,'staffAdmin')}`,page==='staffadmin',()=>nav('staffadmin'))}
     {isAdmin&&sidebarButton(`▤ ${t(lang,'reports')}`,page==='reports',()=>nav('reports'))}
@@ -159,15 +194,28 @@ export default function Home(){
     const change=(n:number)=>{const d=new Date(month.year,month.month+n,1);setMonth({year:d.getFullYear(),month:d.getMonth()});};
     return <div className="space-y-4"><div className={card}><h2 className="text-xl font-bold text-[#145C42]">{t(lang,'calendar')}</h2><p className="mt-2 text-sm text-gray-500">{t(lang,'calendarInfo')}</p></div><div className={card}><div className="mb-4 flex items-center justify-between"><button className="rounded border px-3 py-2" onClick={()=>change(-1)}>‹</button><b>{month.year} {t(lang,'month')} {month.month+1}</b><button className="rounded border px-3 py-2" onClick={()=>change(1)}>›</button></div><div className="grid grid-cols-7 gap-1 text-center">{weekdays.map(k=><div key={k} className="py-2 text-xs font-bold">{t(lang,k)}</div>)}{Array.from({length:pad+count},(_,i)=><div key={i} className={`min-h-12 rounded border p-2 text-sm sm:min-h-20 ${i<pad?'border-transparent':'border-[#E4EEE7] bg-[#FAFCFA]'}`}>{i>=pad?i-pad+1:''}</div>)}</div></div><div className={card}>{t(lang,'noEvents')}</div></div>;
   };
+  if(!authReady)return <div className="flex min-h-screen items-center justify-center bg-[#F1F8F3] p-5"><div className={card}>Loading...</div></div>;
+  if(!signedIn)return <div className="flex min-h-screen items-center justify-center bg-[#F1F8F3] p-4">
+    <div className="w-full max-w-md rounded-2xl border border-[#DCEADD] bg-white p-6 shadow-xl sm:p-9">
+      <div className="mb-6 text-center"><div className="text-3xl font-semibold tracking-[0.16em] text-[#145C42]" style={{fontFamily:'Arial, sans-serif'}}>✦ SERIM B&G</div><h1 className="mt-3 text-xl font-bold text-[#145C42]">세림비앤지 생산본부</h1><p className="mt-1 text-sm text-gray-500">Production Division</p></div>
+      <div className="mb-4 flex flex-wrap justify-center gap-1">{languages.map(l=><button type="button" key={l.code} onClick={()=>changeLang(l.code)} className={`rounded px-2 py-1 text-xs ${lang===l.code?'bg-[#145C42] text-white':'bg-green-50 text-green-900'}`}>{l.label}</button>)}</div>
+      <div className="mb-4 grid grid-cols-2 gap-2"><button onClick={()=>{setLoginType('staff');setMessage('');}} className={`rounded-lg p-3 text-sm ${loginType==='staff'?'bg-[#145C42] text-white':'bg-gray-100'}`}>{s(lang,'staffLogin')}</button><button onClick={()=>{setLoginType('admin');setMessage('');}} className={`rounded-lg p-3 text-sm ${loginType==='admin'?'bg-[#145C42] text-white':'bg-gray-100'}`}>{t(lang,'admin')}</button></div>
+      <form onSubmit={e=>{e.preventDefault();void(loginType==='admin'?login():employeeLogin());}} className="space-y-3">
+        {loginType==='admin'?<input type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)} placeholder={t(lang,'email')} className="w-full rounded-lg border p-3"/>:<input type="text" autoComplete="username" required value={staffCode} onChange={e=>setStaffCode(e.target.value)} placeholder="SR0001" className="w-full rounded-lg border p-3"/>}
+        <input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)} placeholder={t(lang,'password')} className="w-full rounded-lg border p-3"/>
+        {message&&<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{message}</p>}
+        <button disabled={busy} type="submit" className="w-full rounded-lg bg-[#168253] p-3 font-bold text-white disabled:opacity-50">{t(lang,'login')}</button>
+      </form>
+      <p className="mt-5 text-center text-xs text-gray-500">© SERIM B&G · Production Division</p>
+    </div></div>;
   return <div className="min-h-screen bg-[#F1F8F3] text-gray-900">
     {menuOpen&&<button aria-label="Close menu" onClick={()=>setMenuOpen(false)} className="fixed inset-0 z-40 bg-black/50 md:hidden"/>}
     <aside className={`fixed inset-y-0 left-0 z-50 w-64 transition-transform md:translate-x-0 ${menuOpen?'translate-x-0':'-translate-x-full'}`}>{sidebar}</aside>
-    <div className="min-h-screen md:ml-64"><header className="sticky top-0 z-30 border-b border-[#D5E8DB] bg-white px-4 py-4 shadow-sm sm:px-6"><div className="flex items-center gap-3"><button className="rounded-lg bg-[#145C42] px-3 py-2 text-white md:hidden" onClick={()=>setMenuOpen(true)}>☰</button><div className="min-w-0 flex-1"><h1 className="text-base font-bold text-[#145C42]">{t(lang,'brand')}</h1><p className="text-xs text-[#648778]">SERIM B&G · ECO-FRIENDLY PACKAGING</p></div>{isAdmin?<button className={button} onClick={logout}>{t(lang,'logout')}</button>:<button className={button} onClick={()=>setShowLogin(x=>!x)}>{t(lang,'admin')}</button>}</div><div className="mt-3 flex flex-wrap gap-1.5">{languages.map(l=><button key={l.code} onClick={()=>changeLang(l.code)} className={`rounded-md px-2.5 py-2 text-xs font-semibold ${lang===l.code?'bg-[#168253] text-white':'bg-[#E7F2EA] text-[#32684D]'}`}>{l.label}</button>)}</div></header>
+    <div className="min-h-screen md:ml-64"><header className="sticky top-0 z-30 border-b border-[#D5E8DB] bg-white px-4 py-4 shadow-sm sm:px-6"><div className="flex items-center gap-3"><button className="rounded-lg bg-[#145C42] px-3 py-2 text-white md:hidden" onClick={()=>setMenuOpen(true)}>☰</button><div className="min-w-0 flex-1"><h1 className="text-base font-bold text-[#145C42]">세림비앤지 생산본부</h1><p className="text-xs text-[#648778]">SERIM B&G · ECO-FRIENDLY PACKAGING</p></div><button className={button} onClick={logout}>{t(lang,'logout')}</button></div><div className="mt-3 flex flex-wrap gap-1.5">{languages.map(l=><button key={l.code} onClick={()=>changeLang(l.code)} className={`rounded-md px-2.5 py-2 text-xs font-semibold ${lang===l.code?'bg-[#168253] text-white':'bg-[#E7F2EA] text-[#32684D]'}`}>{l.label}</button>)}</div></header>
       <main className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
         {message&&<div role="status" className={card}>{message}</div>}
-        {showLogin&&!isAdmin&&<form onSubmit={e=>{e.preventDefault();void login();}} className={`${card} space-y-3`}><h2 className="font-bold">{t(lang,'login')}</h2><input type="email" required value={email} onChange={e=>setEmail(e.target.value)} autoComplete="username" placeholder={t(lang,'email')} className="w-full rounded-lg border p-3"/><input type="password" required value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" placeholder={t(lang,'password')} className="w-full rounded-lg border p-3"/><button type="submit" disabled={busy} className={button}>{t(lang,'login')}</button></form>}
-        <div className="text-xs text-[#648778]">{t(lang,'division')} / {page==='notice'||page==='attendance'||page==='shift'?`${t(lang,team)} / `:''}{page==='staffportal'?s(lang,'staffPortal'):page==='staffadmin'?s(lang,'staffAdmin'):t(lang,page as Key)}</div>
-        {loading?<div className={card}>{t(lang,'loading')}</div>:page==='dashboard'?dashboard:page==='calendar'?<CalendarManager lang={lang} isAdmin={isAdmin}/>:page==='reports'?<AttendanceReport lang={lang} isAdmin={isAdmin}/>:page==='staffportal'?<StaffPortal lang={lang}/>:page==='staffadmin'?<StaffAdmin lang={lang} isAdmin={isAdmin}/>:page==='notice'?noticePage:page==='attendance'?<AttendanceManager team={team} isAdmin={isAdmin} lang={lang}/>:<ShiftRoster team={team} isAdmin={isAdmin} lang={lang}/>}
+        <div className="text-xs text-[#648778]">{t(lang,'division')} / {page==='notice'||page==='attendance'||page==='shift'?`${t(lang,team)} / `:''}{page==='staffportal'?s(lang,'staffPortal'):page==='staffadmin'?s(lang,'staffAdmin'):page==='organization'?'조직도':page==='claims'?'고객사 클레임':t(lang,page as Key)}</div>
+        {loading?<div className={card}>{t(lang,'loading')}</div>:page==='dashboard'?dashboard:page==='organization'?<OrganizationChart lang={lang}/>:page==='claims'?<CustomerClaims lang={lang} isAdmin={isAdmin||isSupervisor}/>:page==='calendar'?<CalendarManager lang={lang} isAdmin={isAdmin}/>:page==='reports'?<AttendanceReport lang={lang} isAdmin={isAdmin}/>:page==='staffportal'?<StaffPortal lang={lang}/>:page==='staffadmin'?<><SupervisorAdmin/><StaffAdmin lang={lang} isAdmin={isAdmin}/></>:page==='notice'?noticePage:page==='attendance'?<AttendanceManager team={team} isAdmin={isAdmin} lang={lang}/>:team==='newmaterial'?<NewMaterialRoster lang={lang} isAdmin={isAdmin}/>:<ShiftRoster team={team} isAdmin={isAdmin} lang={lang}/>}
       </main>
     </div>
   </div>;
