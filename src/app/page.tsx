@@ -6,7 +6,7 @@ import { supabase } from "./supabase";
 import AttendanceManager from "./AttendanceManager";
 import ShiftRoster from "./ShiftRoster";
 
-type Lang = "ko" | "en" | "ne" | "km" | "tl";
+type Lang = "ko" | "en" | "ne" | "km" | "tl" | "vi";
 type Team = "vacuum" | "newmaterial";
 type Page = "dashboard" | "calendar" | "notice" | "attendance" | "shift";
 
@@ -28,6 +28,7 @@ const LANGUAGES: { code: Lang; label: string }[] = [
   { code: "ne", label: "🇳🇵 नेपाली" },
   { code: "km", label: "🇰🇭 ខ្មែរ" },
   { code: "tl", label: "🇵🇭 Filipino" },
+  { code: "vi", label: "🇻🇳 Tiếng Việt" },
 ];
 
 const UI = {
@@ -216,7 +217,43 @@ const UI = {
     welcome: "Sama-sama para sa ligtas at maayos na trabaho.",
     loading: "Kinukuha ang mga anunsyo...",
   },
-};
+vi: {
+  title: "Quản lý sản xuất SERIM B&G",
+  dashboard: "Bảng điều khiển",
+  calendar: "Lịch tổng hợp",
+  division: "Bộ phận sản xuất",
+  vacuum: "Đội tạo hình chân không",
+  newmaterial: "Đội sản xuất vật liệu mới",
+  notice: "Thông báo",
+  attendance: "Chấm công",
+  shift: "Danh sách ca ngày/đêm",
+  admin: "Quản trị viên",
+  login: "Đăng nhập quản trị",
+  logout: "Đăng xuất",
+  email: "Email",
+  password: "Mật khẩu",
+  add: "Đăng thông báo",
+  edit: "Chỉnh sửa",
+  delete: "Xóa",
+  save: "Lưu",
+  cancel: "Hủy",
+  important: "Thông báo quan trọng",
+  empty: "Chưa có thông báo nào.",
+  latest: "Thông báo mới nhất",
+  all: "Xem tất cả",
+  placeholder: "Nhập nội dung thông báo bằng tiếng Hàn.",
+  ready: "Chức năng đang được phát triển.",
+  attendanceInfo: "Quản lý chấm công, nghỉ phép và tình trạng đi làm.",
+  shiftInfo: "Quản lý danh sách nhân viên ca ngày và ca đêm.",
+  calendarInfo: "Quản lý lịch sản xuất, đào tạo và kiểm tra thiết bị.",
+  translationInfo: "Thông báo mới sẽ hiển thị bằng tiếng Hàn cho đến khi kết nối dịch tự động.",
+  noEvents: "Chưa có lịch trình nào.",
+  noticeCount: "Thông báo",
+  teamCount: "Đội sản xuất",
+  languageCount: "Ngôn ngữ",
+  welcome: "Cùng xây dựng môi trường làm việc an toàn và hiệu quả.",
+  loading: "Đang tải thông báo...",
+},
 
 export default function Home() {
   const [lang, setLang] = useState<Lang>("ko");
@@ -619,7 +656,7 @@ useEffect(() => {
         {[
           { value: notices.length, label: t.noticeCount },
           { value: 2, label: t.teamCount },
-          { value: 5, label: t.languageCount },
+      { value: 6, label: t.languageCount },
         ].map((item) => (
           <div
             key={item.label}
