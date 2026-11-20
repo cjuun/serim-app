@@ -48,6 +48,18 @@ export default function ShiftRoster({team,isAdmin,lang}:{team:Team;isAdmin:boole
     setDraft(Object.fromEntries(data.map(x=>[x.employee_name,x.shift as Shift])));
     setMessage(t(lang,'saved'));
   };
+  const autoSuggest=async()=>{
+    if(!isAdmin||busy||index===0)return;
+    setBusy(true);setMessage('');
+    const {data,error}=await supabase.from('shift_cycle_assignments')
+      .select('employee_name,shift').eq('cycle_start',addDays(start,-14)).eq('team',team);
+    setBusy(false);
+    if(error){setMessage(`${t(lang,'fail')}: ${error.message}`);return;}
+    const old=Object.fromEntries((data||[]).map(row=>[row.employee_name,row.shift]));
+    if(!people.every(e=>old[e.name]==='day'||old[e.name]==='night')){setMessage(t(lang,'noRoster'));return;}
+    setDraft(Object.fromEntries(people.map(e=>[e.name,old[e.name]==='day'?'night':'day'])));
+    setMessage(t(lang,'suggestReady'));
+  };
   const save=async()=>{
     if(!isAdmin||busy)return;
     if(selected!==people.length){setMessage(t(lang,'missingPeople'));return;}
@@ -84,7 +96,7 @@ export default function ShiftRoster({team,isAdmin,lang}:{team:Team;isAdmin:boole
     {loading?<div className={card}>{t(lang,'loading')}</div>:<>
       <div className={`${card} flex items-center justify-between`}><b>{t(lang,team)} ({people.length} {t(lang,'people')})</b><span className="text-sm">{t(lang,complete?'setupCompleted':'setupMissing')}</span></div>
       {isAdmin&&<div className={card}><div className="flex items-center justify-between gap-2"><div><h3 className="font-bold text-[#145C42]">{t(lang,'adminSettings')}</h3><p className="mt-1 text-xs text-gray-500">{t(lang,'twoWeeksSame')}</p></div><button onClick={()=>setEditing(x=>!x)} className="rounded-lg bg-[#145C42] px-3 py-2 text-sm text-white">{t(lang,editing?'close':'assignShift')}</button></div>
-        {editing&&<div className="mt-4 space-y-4"><div className="grid grid-cols-2 gap-2"><button disabled={index===0||busy} onClick={copy} className="rounded-lg border p-2 text-xs disabled:opacity-40">{t(lang,'copyPrevious')}</button><button onClick={swap} className="rounded-lg border p-2 text-xs">{t(lang,'swap')}</button></div><div className="flex gap-2"><button onClick={()=>setAll('day')} className="rounded-lg bg-green-100 px-3 py-2 text-xs">{t(lang,'allDay')}</button><button onClick={()=>setAll('night')} className="rounded-lg bg-blue-100 px-3 py-2 text-xs">{t(lang,'allNight')}</button></div>{editor('operator')}{editor('worker')}<div className="sticky bottom-3 rounded-lg border bg-white p-3 shadow-lg"><p className="mb-2 text-sm">{t(lang,'progress')}: {selected}/{people.length} {t(lang,'people')}</p><button disabled={busy||selected!==people.length} onClick={save} className="w-full rounded-lg bg-[#168253] p-3 font-bold text-white disabled:opacity-40">{busy?t(lang,'saving'):t(lang,'saveCycle')}</button></div></div>}
+        {editing&&<div className="mt-4 space-y-4"><div className="grid grid-cols-2 gap-2"><button disabled={index===0||busy} onClick={copy} className="rounded-lg border p-2 text-xs disabled:opacity-40">{t(lang,'copyPrevious')}</button><button onClick={swap} className="rounded-lg border p-2 text-xs">{t(lang,'swap')}</button><button disabled={index===0||busy} onClick={autoSuggest} className="col-span-2 rounded-lg border border-green-300 bg-green-50 p-2 text-xs font-semibold text-[#145C42] disabled:opacity-40">{t(lang,'suggestOpposite')}</button></div><div className="flex gap-2"><button onClick={()=>setAll('day')} className="rounded-lg bg-green-100 px-3 py-2 text-xs">{t(lang,'allDay')}</button><button onClick={()=>setAll('night')} className="rounded-lg bg-blue-100 px-3 py-2 text-xs">{t(lang,'allNight')}</button></div>{editor('operator')}{editor('worker')}<div className="sticky bottom-3 rounded-lg border bg-white p-3 shadow-lg"><p className="mb-2 text-sm">{t(lang,'progress')}: {selected}/{people.length} {t(lang,'people')}</p><button disabled={busy||selected!==people.length} onClick={save} className="w-full rounded-lg bg-[#168253] p-3 font-bold text-white disabled:opacity-40">{busy?t(lang,'saving'):t(lang,'saveCycle')}</button></div></div>}
       </div>}
       {!complete?<div className={card}>{t(lang,'noRoster')}</div>:<div className="grid gap-4 md:grid-cols-2">{display('day')}{display('night')}</div>}
     </>}

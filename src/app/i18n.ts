@@ -14,6 +14,7 @@ export const languages: { code: Lang; label: string }[] = [
 const dict = {
   brand: ['세림비앤지 생산관리','SERIM B&G Production','SERIM B&G उत्पादन','ផលិតកម្ម SERIM B&G','Produksyon ng SERIM B&G','Quản lý sản xuất SERIM B&G'],
   dashboard: ['대시보드','Dashboard','ड्यासबोर्ड','ផ្ទាំងគ្រប់គ្រង','Dashboard','Bảng điều khiển'],
+  reports: ['월별 출석 보고서','Attendance reports','उपस्थिति रिपोर्ट','របាយការណ៍វត្តមាន','Ulat ng attendance','Báo cáo chấm công'],
   calendar: ['통합 캘린더','Calendar','पात्रो','ប្រតិទិន','Kalendaryo','Lịch tổng hợp'],
   division: ['생산본부','Production Division','उत्पादन विभाग','ផ្នែកផលិតកម្ម','Dibisyon ng Produksyon','Bộ phận sản xuất'],
   vacuum: ['진공성형팀','Vacuum Forming Team','भ्याकुम फर्मिङ टोली','ក្រុមបង្កើតទម្រង់សុញ្ញាកាស','Vacuum Forming Team','Đội tạo hình chân không'],
@@ -81,6 +82,8 @@ const dict = {
   setupMissing: ['근무조 미설정','Roster not set','सिफ्ट तोकिएको छैन','មិនទាន់កំណត់វេន','Wala pang shift','Chưa phân ca'],
   adminSettings: ['관리자 근무조 설정','Admin shift settings','प्रशासक सिफ्ट सेटिङ','ការកំណត់វេនរបស់អ្នកគ្រប់គ្រង','Admin shift settings','Quản lý phân ca'],
   twoWeeksSame: ['해당 2주 동안 같은 근무조를 적용합니다.','Same shift applies for both weeks.','दुई हप्ता एउटै सिफ्ट लागू।','អនុវត្តវេនដូចគ្នារយៈពេលពីរសប្តាហ៍។','Parehong shift sa dalawang linggo.','Áp dụng cùng ca trong hai tuần.'],
+  suggestOpposite: ['이전 2주와 주/야 반대로 자동 배정','Suggest opposite shifts from previous cycle','अघिल्लो चक्रको उल्टो सिफ्ट सुझाव','ស្នើវេនផ្ទុយពីវដ្តមុន','Imungkahing baligtad na shift','Đề xuất đảo ca từ kỳ trước'],
+  suggestReady: ['반대 근무조를 제안했습니다. 확인 후 저장하세요.','Opposite shifts suggested. Review and save.','उल्टो सिफ्ट सुझाव दिइयो। जाँचेर सुरक्षित गर्नुहोस्।','បានស្នើវេនផ្ទុយ។ សូមពិនិត្យ និងរក្សាទុក។','Naimungkahi ang baligtad na shift. Suriin at i-save.','Đã đề xuất đảo ca. Kiểm tra rồi lưu.'],
   copyPrevious: ['이전 명단 복사','Copy previous roster','अघिल्लो सूची कपी','ចម្លងបញ្ជីមុន','Kopyahin ang dati','Sao chép kỳ trước'],
   swap: ['주간 ↔ 야간 바꾸기','Swap day ↔ night','दिन ↔ रात बदल्नुहोस्','ប្ដូរវេនថ្ងៃ ↔ យប់','Palitan araw ↔ gabi','Đổi ca ngày ↔ đêm'],
   allDay: ['전체 주간','All day shift','सबै दिन','ទាំងអស់វេនថ្ងៃ','Lahat araw','Tất cả ca ngày'],
