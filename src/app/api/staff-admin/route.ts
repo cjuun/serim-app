@@ -35,7 +35,12 @@ export async function POST(req:NextRequest){
     const id=Number(body.staffId);
     if(!Number.isSafeInteger(id)||id<1)return reply('Invalid staff ID',400);
     const {data:member,error:memberErr}=await service.from('staff_members').select('id,employee_code,full_name,auth_user_id,active').eq('id',id).single();
-    if(memberErr||!member)return reply('Employee not found',404);
+if (memberErr) {
+  return reply(`Employee lookup failed: ${memberErr.message}`, 500);
+}
+if (!member) {
+  return reply(`Employee ID ${id} not found`, 404);
+}
     if(action==='issue'){
       if(!member.active)return reply('Inactive employee',400);
       if(member.auth_user_id)return reply('Account already issued',409);
