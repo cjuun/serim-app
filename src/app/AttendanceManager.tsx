@@ -8,7 +8,16 @@ type RecordRow = {work_date:string;employee_name:string;employee_role:Role;team:
 const statusKeys: Status[]=['present','annual','unpaid','am_half','pm_half'];
 const cls='rounded-xl border border-[#DFE9E1] bg-white p-4 shadow-sm';
 export default function AttendanceManager({team,isAdmin,lang}:{team:Team;isAdmin:boolean;lang:Lang}) {
-  const people=employees[team];
+  const [directory,setDirectory]=useState<{name:string;role:Role}[]|null>(null);
+  const people=directory??employees[team];
+  useEffect(()=>{
+    if(!isAdmin){setDirectory(null);return;}
+    let cancelled=false;
+    void supabase.from('staff_members').select('full_name,employee_role').eq('team',team).eq('active',true).order('id').then(({data,error})=>{
+      if(!cancelled&&!error)setDirectory((data||[]).map(x=>({name:x.full_name,role:x.employee_role as Role})));
+    });
+    return()=>{cancelled=true;};
+  },[team,isAdmin]);
   const [date,setDate]=useState('');
   const [shift,setShift]=useState<Shift>('day');
   const [assignments,setAssignments]=useState<Assignment[]>([]);
