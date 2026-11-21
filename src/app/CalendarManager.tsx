@@ -2,7 +2,9 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {supabase} from './supabase';
 import {t,localDate,formatDay,type Lang,type Team} from './i18n';
+import {pu} from './productionUiText';
 
+type ApprovedLeave={staff_name:string;leave_type:string;start_date:string;end_date:string};
 type Category='production'|'training'|'inspection'|'holiday'|'other';
 type EventRow={id:number;event_date:string;team:string;category:Category;title_ko:string;title_en:string|null;title_ne:string|null;title_km:string|null;title_tl:string|null;title_vi:string|null;details_ko:string|null;details_en:string|null;details_ne:string|null;details_km:string|null;details_tl:string|null;details_vi:string|null};
 const I={
@@ -34,13 +36,14 @@ function titleFor(row:EventRow,lang:Lang,field:'title'|'details'){
   const korean=field==='title'?row.title_ko:row.details_ko||'';
   if(lang==='ko')return korean;
   const translated=row[`${field}_${lang}` as keyof EventRow];
-  return typeof translated==='string'&&translated.trim()&&translated!==korean?translated:korean;
+  return typeof translated==='string'&&translated.trim()&&translated!==korean?translated:'['+pu(lang,'translationMissing')+']';
 }
 const categories:Category[]=['production','training','inspection','holiday','other'];
 export default function CalendarManager({lang,isAdmin}:{lang:Lang;isAdmin:boolean}){
   const [yearMonth,setYearMonth]=useState<{year:number;month:number}|null>(null);
   const [selected,setSelected]=useState('');
   const [events,setEvents]=useState<EventRow[]>([]);
+  const [approvedLeaves,setApprovedLeaves]=useState<ApprovedLeave[]>([]);
   const [editing,setEditing]=useState<number|null>(null);
   const [formOpen,setFormOpen]=useState(false);
   const [title,setTitle]=useState('');const [details,setDetails]=useState('');
@@ -53,13 +56,16 @@ export default function CalendarManager({lang,isAdmin}:{lang:Lang;isAdmin:boolea
     const end=localDate(new Date(yearMonth.year,yearMonth.month+1,1));
     const {data,error}=await supabase.from('calendar_events').select('*').gte('event_date',start).lt('event_date',end).order('event_date');
     if(error)setError(error.message);else {setEvents((data||[]) as EventRow[]);setError('');}
+    const {data:leaveData,error:leaveError}=await supabase.rpc('calendar_approved_leaves',{p_start:start,p_end:end});
+    if(leaveError)setError(prev=>prev||leaveError.message);else setApprovedLeaves((leaveData||[]) as ApprovedLeave[]);
   },[yearMonth]);
   useEffect(()=>{void load();},[load]);
   const move=(n:number)=>setYearMonth(p=>{if(!p)return p;const d=new Date(p.year,p.month+n,1);return {year:d.getFullYear(),month:d.getMonth()};});
   const selectedEvents=events.filter(e=>e.event_date===selected);
   const count=yearMonth?new Date(yearMonth.year,yearMonth.month+1,0).getDate():0;
   const pad=yearMonth?new Date(yearMonth.year,yearMonth.month,1).getDay():0;
-  const daysWithEvents=useMemo(()=>new Set(events.map(e=>e.event_date)),[events]);
+  const leaveForDate=(date:string)=>approvedLeaves.filter(x=>date>=x.start_date&&date<=x.end_date);
+  const leaveLabel=(x:ApprovedLeave)=>`${x.staff_name} · ${pu(lang,x.leave_type==='annual'?'annual':x.leave_type==='unpaid'?'unpaid':x.leave_type==='am_half'?'am_half':'pm_half')}`;
   const reset=()=>{setEditing(null);setTitle('');setDetails('');setTeam('all');setCategory('production');setFormOpen(false);};
   const beginEdit=(e:EventRow)=>{setEditing(e.id);setSelected(e.event_date);setTitle(e.title_ko);setDetails(e.details_ko||'');setTeam(e.team as 'all'|Team);setCategory(e.category);setFormOpen(true);};
   const translate=async(text:string)=>{
@@ -92,9 +98,10 @@ export default function CalendarManager({lang,isAdmin}:{lang:Lang;isAdmin:boolea
     <div className="rounded-xl bg-white p-3 shadow-sm"><div className="grid grid-cols-7 gap-1 text-center">{(['sun','mon','tue','wed','thu','fri','sat'] as const).map(k=><b key={k} className="py-2 text-xs">{t(lang,k)}</b>)}{Array.from({length:pad+count},(_,i)=>{
       if(i<pad)return <div key={i}/>;
       const day=i-pad+1;const date=yearMonth?localDate(new Date(yearMonth.year,yearMonth.month,day)):'';
-      return <button key={i} onClick={()=>{setSelected(date);reset();}} className={`relative flex min-h-14 flex-col items-center justify-center rounded-lg border p-1 text-sm sm:min-h-20 ${selected===date?'border-[#168253] bg-green-100 font-bold':'border-gray-100 bg-[#FAFCFA]'}`}><span>{day}</span>{daysWithEvents.has(date)&&<span className="mt-1 h-2 w-2 rounded-full bg-[#168253]"/>}</button>;
+      return <button key={i} onClick={()=>{setSelected(date);reset();}} className={`relative flex min-h-16 flex-col items-start rounded-lg border p-1 text-left text-xs sm:min-h-24 ${selected===date?'border-[#168253] bg-green-100 font-bold':'border-gray-100 bg-[#FAFCFA]'}`}><span className="font-bold">{day}</span>{events.filter(e=>e.event_date===date).slice(0,2).map(e=><span key={`e${e.id}`} className="mt-1 w-full truncate rounded bg-green-100 px-1 text-[10px] text-green-900">{titleFor(e,lang,'title')}</span>)}{leaveForDate(date).slice(0,2).map((l,i)=><span key={`l${i}`} className="mt-1 w-full truncate rounded bg-blue-100 px-1 text-[10px] text-blue-900">{leaveLabel(l)}</span>)}{events.filter(e=>e.event_date===date).length+leaveForDate(date).length>4&&<span className="text-[10px] text-gray-500">+{events.filter(e=>e.event_date===date).length+leaveForDate(date).length-4} {pu(lang,'eventMore')}</span>}</button>;
     })}</div></div>
     <div className="rounded-xl bg-white p-4 shadow-sm"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold text-[#145C42]">{formatDay(selected,lang)}</h3>{isAdmin&&<button onClick={()=>{reset();setFormOpen(true);}} className="rounded-lg bg-[#168253] px-3 py-2 text-sm text-white">+ {u(lang,'new')}</button>}</div>
+      {leaveForDate(selected).length>0&&<div className="mb-3 rounded-lg bg-blue-50 p-3"><h4 className="mb-2 text-sm font-bold text-blue-900">{pu(lang,'calendarLeave')}</h4>{leaveForDate(selected).map((l,i)=><p key={i} className="py-1 text-sm text-blue-900">{leaveLabel(l)}</p>)}</div>}
       {selectedEvents.length===0?<p className="py-4 text-sm text-gray-500">{u(lang,'none')}</p>:<div className="space-y-2">{selectedEvents.map(e=><article key={e.id} className="rounded-lg border p-3"><div className="flex flex-wrap gap-2 text-xs text-[#168253]"><span>{e.team==='all'?u(lang,'all'):t(lang,e.team as Team)}</span><span>{u(lang,e.category)}</span></div><b className="mt-1 block">{titleFor(e,lang,'title')}</b>{e.details_ko&&<p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{titleFor(e,lang,'details')}</p>}{isAdmin&&<div className="mt-3 flex gap-2"><button onClick={()=>beginEdit(e)} className="rounded border px-3 py-1 text-xs">{u(lang,'edit')}</button><button onClick={()=>remove(e.id)} className="rounded border border-red-200 px-3 py-1 text-xs text-red-700">{u(lang,'del')}</button></div>}</article>)}</div>}
     </div>
     {isAdmin&&formOpen&&<div className="rounded-xl border border-green-200 bg-white p-5 shadow-sm"><h3 className="mb-3 font-bold">{u(lang,editing===null?'new':'edit')}</h3><label className="mb-2 block text-sm">{u(lang,'date')}<input className="mt-1 w-full rounded-lg border p-2" type="date" value={selected} onChange={e=>setSelected(e.target.value)}/></label><label className="mb-2 block text-sm">{u(lang,'title')}<input maxLength={200} className="mt-1 w-full rounded-lg border p-2" value={title} onChange={e=>setTitle(e.target.value)}/></label><label className="mb-2 block text-sm">{u(lang,'detail')}<textarea maxLength={4000} rows={3} className="mt-1 w-full rounded-lg border p-2" value={details} onChange={e=>setDetails(e.target.value)}/></label><div className="grid grid-cols-2 gap-2"><label className="text-sm">{u(lang,'target')}<select className="mt-1 w-full rounded-lg border p-2" value={team} onChange={e=>setTeam(e.target.value as 'all'|Team)}><option value="all">{u(lang,'all')}</option><option value="vacuum">{t(lang,'vacuum')}</option><option value="newmaterial">{t(lang,'newmaterial')}</option></select></label><label className="text-sm">{u(lang,'category')}<select className="mt-1 w-full rounded-lg border p-2" value={category} onChange={e=>setCategory(e.target.value as Category)}>{categories.map(c=><option key={c} value={c}>{u(lang,c)}</option>)}</select></label></div><div className="mt-4 flex gap-2"><button disabled={busy||!title.trim()} onClick={save} className="rounded-lg bg-[#168253] px-4 py-2 text-white disabled:opacity-40">{u(lang,'save')}</button><button onClick={reset} className="rounded-lg border px-4 py-2">{u(lang,'close')}</button></div></div>}
