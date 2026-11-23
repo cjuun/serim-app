@@ -4,7 +4,7 @@ import {supabase} from './supabase';
 import {t,type Lang,type Team} from './i18n';
 import {s} from './staffText';
 
-type Member={id:number;employee_code:string;full_name:string;team:Team;employee_role:'operator'|'worker';active:boolean;auth_user_id:string|null};
+type Member={id:number;employee_code:string;full_name:string;team:Team;employee_role:'operator'|'worker';rank_title?:string|null;active:boolean;auth_user_id:string|null};
 type Leave={id:number;staff_id:number;leave_type:string;start_date:string;end_date:string;reason:string;status:string;reviewer_comment:string;created_at:string};
 type Suggestion={id:number;staff_id:number;category:string;body:string;status:string;admin_reply:string;created_at:string};
 const c='rounded-xl border border-[#DFE9E1] bg-white p-4 shadow-sm';
@@ -12,6 +12,8 @@ const field='min-w-0 w-full rounded-lg border border-gray-200 bg-white p-2.5 tex
 const green='rounded-lg bg-[#168253] px-3 py-2 text-sm font-bold text-white disabled:opacity-50';
 export default function StaffAdmin({lang,isAdmin}:{lang:Lang;isAdmin:boolean}){
   const [people,setPeople]=useState<Member[]>([]);
+  const [memberSearch,setMemberSearch]=useState('');
+  const [savingRank,setSavingRank]=useState<number|null>(null);
   const [leaves,setLeaves]=useState<Leave[]>([]);
   const [suggestions,setSuggestions]=useState<Suggestion[]>([]);
   const [name,setName]=useState('');const [team,setTeam]=useState<Team>('vacuum');const [role,setRole]=useState<'operator'|'worker'>('worker');
@@ -21,7 +23,7 @@ export default function StaffAdmin({lang,isAdmin}:{lang:Lang;isAdmin:boolean}){
   const load=useCallback(async()=>{
     if(!isAdmin)return;
     const [p,l,g]=await Promise.all([
-      supabase.from('staff_members').select('id,employee_code,full_name,team,employee_role,active,auth_user_id').order('id'),
+      supabase.from('staff_members').select('id,employee_code,full_name,team,employee_role,rank_title,active,auth_user_id').order('id'),
       supabase.from('leave_requests').select('id,staff_id,leave_type,start_date,end_date,reason,status,reviewer_comment,created_at').order('created_at',{ascending:false}).limit(150),
       supabase.from('staff_suggestions').select('id,staff_id,category,body,status,admin_reply,created_at').order('created_at',{ascending:false}).limit(150),
     ]);
@@ -45,6 +47,12 @@ export default function StaffAdmin({lang,isAdmin}:{lang:Lang;isAdmin:boolean}){
       setMessage('처리되었습니다.');if(action==='add')setName('');await load();
     }catch(e){setMessage(e instanceof Error?e.message:String(e));}
     setBusy(false);
+  };
+  const changeRank=async(id:number,value:string)=>{
+    if(!isAdmin||savingRank!==null)return;
+    setSavingRank(id);
+    const {error}=await supabase.rpc('set_staff_rank',{p_id:id,p_rank:value||null});
+    setSavingRank(null);if(error)setMessage(error.message);else await load();
   };
   const review=async(id:number,status:'approved'|'rejected')=>{
     if(!isAdmin||busy)return;
@@ -71,7 +79,9 @@ export default function StaffAdmin({lang,isAdmin}:{lang:Lang;isAdmin:boolean}){
       <button disabled={busy||name.trim().length<2} className={green} onClick={()=>api('add')}>{s(lang,'addEmployee')}</button></div>
     </section>
     <section className={c}><h3 className="mb-3 font-bold text-[#145C42]">{s(lang,'staffList')} ({people.filter(x=>x.active).length})</h3>
-      <div className="max-h-[520px] space-y-2 overflow-y-auto">{people.map(p=><div key={p.id} className="flex flex-wrap items-center gap-2 border-b py-2 text-sm"><div className="min-w-[130px] flex-1"><b>{p.full_name}</b><p className="text-xs text-gray-500">{p.employee_code} · {t(lang,p.team)} · {s(lang,p.active?'active':'inactive')}</p></div>
+      <input value={memberSearch} onChange={e=>setMemberSearch(e.target.value)} placeholder={({ko:'직원 이름 또는 직원번호 검색',en:'Search name or employee ID',ne:'नाम वा कर्मचारी नम्बर खोज्नुहोस्',km:'ស្វែងរកឈ្មោះ ឬលេខបុគ្គលិក',tl:'Hanapin ang pangalan o ID',vi:'Tìm tên hoặc mã nhân viên'} as Record<Lang,string>)[lang]} className={`${field} mb-3`} />
+      <div className="max-h-[520px] space-y-2 overflow-y-auto">{people.filter(p=>`${p.full_name} ${p.employee_code}`.toLocaleLowerCase().includes(memberSearch.trim().toLocaleLowerCase())).map(p=><div key={p.id} className="flex flex-wrap items-center gap-2 border-b py-2 text-sm"><div className="min-w-[130px] flex-1"><b>{p.full_name}</b><p className="text-xs text-gray-500">{p.employee_code} · {t(lang,p.team)} · {s(lang,p.active?'active':'inactive')}</p></div>
+        <select aria-label={p.full_name+' rank'} disabled={savingRank!==null} value={p.rank_title||''} onChange={e=>void changeRank(p.id,e.target.value)} className="rounded border bg-white px-2 py-2 text-xs text-gray-900"><option value="">직급 미지정</option>{['전무','수석부장','부장','실장','과장','대리','주임','사원'].map(r=><option key={r} value={r}>{r}</option>)}</select>
         {!p.auth_user_id?<button disabled={busy||!p.active} className={green} onClick={()=>api('issue',p.id)}>{s(lang,'issueAccount')}</button>:<button disabled={busy||!p.active} onClick={()=>api('reset',p.id)} className="rounded border px-2 py-2 text-xs">{s(lang,'resetPassword')}</button>}
         <button disabled={busy} className="rounded border px-2 py-2 text-xs" onClick={()=>api(p.active?'disable':'enable',p.id)}>{s(lang,p.active?'disable':'enable')}</button>
       </div>)}</div>
