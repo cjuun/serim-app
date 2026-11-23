@@ -2,9 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "세림비앤지 생산관리",
-  description: "세림비앤지 생산관리 웹앱",
+  title: "세림비앤지 생산본부",
+  description: "세림비앤지 생산본부 웹앱",
 
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/app-icon.png",
     apple: "/app-icon.png",
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "생산관리",
+    title: "생산본부",
   },
 };
 

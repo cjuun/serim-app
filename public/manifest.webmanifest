@@ -1,0 +1,11 @@
+{
+ "name":"세림비앤지 생산본부",
+ "short_name":"생산본부",
+ "description":"SERIM B&G Production Division",
+ "start_url":"/",
+ "scope":"/",
+ "display":"standalone",
+ "background_color":"#F1F8F3",
+ "theme_color":"#145C42",
+ "icons":[{"src":"/app-icon.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]
+}
