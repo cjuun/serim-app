@@ -53,7 +53,7 @@ export async function generateTbmForDate(date:string){
  const report:{group:number;result:string}[]=[];
  await Promise.all(units.map(async g=>{
   const {data:existing,error:lookupErr}=await db.from('tbm_sessions').select('id,status').eq('group_id',g.id).eq('session_date',date).maybeSingle();
-  if(lookupErr)throw lookupErr;
+if(lookupErr)throw new Error('TBM 조회 실패: '+lookupErr.message);
   if(existing?.status==='approved'||existing?.status==='completed'){
    report.push({group:g.id,result:'already approved'});return;
   }
