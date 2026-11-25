@@ -63,12 +63,14 @@ if(lookupErr)throw new Error('TBM 조회 실패: '+lookupErr.message);
    const data={group_id:g.id,session_date:date,topic_ko:lesson.ko.title,details_ko:lesson.ko.detail,
     translations,status:'draft',generation_error:null,work_description:g.work};
    const {error}=await db.from('tbm_sessions').upsert(data,{onConflict:'group_id,session_date'});
-   if(error)throw error;
+ if(error)throw new Error('TBM 교육자료 저장 실패: '+error.message);
    report.push({group:g.id,result:'draft created'});
   }catch(error){
    const reason=error instanceof Error?error.message:'Unknown generation error';
    const {error:writeError}=await db.from('tbm_sessions').upsert({group_id:g.id,session_date:date,status:'draft',generation_error:reason,work_description:g.work}, {onConflict:'group_id,session_date'});
-   if(writeError)throw writeError;
+if(writeError)throw new Error(
+ 'AI 생성 오류: '+reason+' / Supabase 오류 저장 실패: '+writeError.message
+);
    report.push({group:g.id,result:'draft pending: '+reason});
   }
  }));
