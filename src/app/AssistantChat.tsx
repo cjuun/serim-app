@@ -13,7 +13,7 @@ const quick:Record<Lang,string[]>={
  tl:['Paano mag-request ng leave?','Saan makikita ang TBM?','Paano itala ang pahinga?','Paano tingnan ang shift ko?'],
  vi:['Cách xin nghỉ phép?','Xem huấn luyện TBM ở đâu?','Cách ghi giờ nghỉ?','Xem ca làm việc ở đâu?'],
 };
-export default function AssistantChat({lang}:{lang:Lang}){
+export default function AssistantChat({lang,menuOpen=false}:{lang:Lang;menuOpen?:boolean}){
  const [open,setOpen]=useState(false),[input,setInput]=useState(''),[messages,setMessages]=useState<Message[]>([]),[busy,setBusy]=useState(false);
  const ask=async(q:string)=>{
   const question=q.trim();if(!question||busy)return;
@@ -28,9 +28,10 @@ export default function AssistantChat({lang}:{lang:Lang}){
   }catch(err){setMessages(v=>[...v,{role:'assistant',text:err instanceof Error?err.message:tbmText(lang,'chatFailed')}]);}
   finally{setBusy(false);}
  };
- return <div className="fixed bottom-4 right-4 z-[80]">
-  {!open?<button type="button" onClick={()=>setOpen(true)} className="flex items-center gap-2 rounded-full border border-green-300 bg-gradient-to-r from-[#238e50] to-[#0c6647] py-2 pl-2 pr-5 text-left text-white shadow-xl hover:brightness-110" aria-label="림봇 도우미"><img src="/rimbot.svg" alt="" className="h-12 w-12 rounded-full bg-[#D3F6DE] p-0.5"/><span><b className="block text-sm">{lang==='ko'?'림봇 도우미':'Rimbot'}</b><span className="block text-[10px] text-green-100">{tbmText(lang,'chatShort')}</span></span><span aria-hidden>›</span></button>
-  :<section className="flex h-[min(590px,calc(100dvh-38px))] w-[min(410px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-[#CFE1D4] bg-white shadow-2xl" aria-label={tbmText(lang,'chatTitle')}>
+ if(menuOpen)return null;
+ return <div className="fixed right-3 z-[35] sm:right-4 sm:z-[80]" style={{bottom:'calc(12px + env(safe-area-inset-bottom, 0px))'}}>
+  {!open?<button type="button" onClick={()=>setOpen(true)} className="flex h-14 w-14 items-center justify-center rounded-full border border-green-300 bg-gradient-to-r from-[#238e50] to-[#0c6647] p-1 text-left text-white shadow-xl hover:brightness-110 sm:h-auto sm:w-auto sm:gap-2 sm:py-2 sm:pl-2 sm:pr-5" aria-label="림봇 도우미"><img src="/rimbot.svg" alt="" className="h-11 w-11 rounded-full bg-[#D3F6DE] p-0.5 sm:h-12 sm:w-12"/><span className="hidden sm:block"><b className="block text-sm">{lang==='ko'?'림봇 도우미':'Rimbot'}</b><span className="block text-[10px] text-green-100">{tbmText(lang,'chatShort')}</span></span><span aria-hidden className="hidden sm:inline">›</span></button>
+  :<section className="flex h-[min(590px,calc(100dvh-75px))] w-[min(410px,calc(100vw-24px))] flex-col overflow-hidden rounded-2xl border border-[#CFE1D4] bg-white shadow-2xl" aria-label={tbmText(lang,'chatTitle')}>
     <header className="flex items-center justify-between bg-gradient-to-r from-[#145C42] to-[#168253] px-4 py-3 text-white"><div className="flex items-center gap-2"><img src="/rimbot.svg" alt="" className="h-11 w-11 rounded-full bg-green-100"/><div><h3 className="font-bold">{lang==='ko'?'림봇 · 생산본부 AI 도우미':'Rimbot · AI Assistant'}</h3><p className="text-xs text-green-100">{tbmText(lang,'chatDisclaimer')}</p></div></div><button onClick={()=>setOpen(false)} aria-label={tbmText(lang,'close')} className="p-2 text-xl">×</button></header>
     <div className="flex-1 space-y-3 overflow-y-auto bg-[#F4F9F5] p-3">
       {messages.length===0&&<><p className="text-sm text-[#365E49]">{tbmText(lang,'chatHello')}</p><div className="space-y-2">{quick[lang].map(q=><button type="button" key={q} onClick={()=>void ask(q)} className="block w-full rounded-lg border bg-white p-2 text-left text-sm text-[#145C42]">{q}</button>)}</div></>}
