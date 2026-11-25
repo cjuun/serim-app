@@ -8,7 +8,7 @@ import {v3t} from './v3Text';
 type Member={id:number;employee_code:string;full_name:string;team:Team;employee_role:'operator'|'worker';division_role?:string|null;rank_title?:string|null;active:boolean;auth_user_id:string|null};
 type Leave={id:number;staff_id:number;leave_type:string;start_date:string;end_date:string;reason:string;status:string;reviewer_comment:string;created_at:string};
 type Suggestion={id:number;staff_id:number;category:string;body:string;status:string;admin_reply:string;created_at:string};
-const RANKS=['대표','전무','고문','이사','수석부장','부장','차장','과장','대리','주임','사원'];
+const RANKS=['대표','전무','고문','이사','수석부장','부장','실장','차장','과장','대리','주임','사원'];
 const c='rounded-xl border border-[#DFE9E1] bg-white p-4 shadow-sm';
 const field='min-w-0 w-full rounded-lg border border-gray-200 bg-white p-2.5 text-sm';
 const green='rounded-lg bg-[#168253] px-3 py-2 text-sm font-bold text-white disabled:opacity-50';

@@ -3,7 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from 'react';
 import {supabase} from './supabase';
 import type {Lang} from './i18n';
 
-type Member={id:number;full_name:string;employee_code:string;team:string;active:boolean;auth_user_id:string|null};
+type Member={id:number;full_name:string;employee_code:string;team:string;employee_role:string;division_role:string|null;active:boolean;auth_user_id:string|null};
 type Claim={id:number;received_date:string;customer_name:string;product_name:string;specification:string;production_date:string|null;description:string;factory:string;machine_no:string|null;defect_type:string|null;photo_paths:string[]|null;description_i18n:Record<string,string>|null;material:string|null;color:string|null;pack_quantity:string|null;worker1_id:number|null;worker2_id:number|null;archived_at:string|null};
 type Receipt={claim_id:number;staff_id:number;acknowledged_at:string};
 const langText:Record<string,Record<Lang,string>>={
@@ -53,7 +53,7 @@ export default function CustomerClaims({lang,isAdmin}:{lang:Lang;isAdmin:boolean
   const {data:{user}}=await supabase.auth.getUser();
   const [claims,people,ack]=await Promise.all([
    supabase.from('customer_claims').select('*').is('archived_at',null).eq('factory',factory).gte('received_date',month+'-01').lt('received_date',end).order('received_date',{ascending:false}).limit(400),
-   supabase.from('staff_members').select('id,full_name,employee_code,team,active,auth_user_id').order('full_name'),
+   supabase.from('staff_members').select('id,full_name,employee_code,team,employee_role,division_role,active,auth_user_id').order('full_name'),
    supabase.from('claim_read_receipts').select('claim_id,staff_id,acknowledged_at'),
   ]);
   if(claims.error||people.error||ack.error)setMessage(claims.error?.message||people.error?.message||ack.error?.message||'');
@@ -62,9 +62,10 @@ export default function CustomerClaims({lang,isAdmin}:{lang:Lang;isAdmin:boolean
  },[month,factory]);
  useEffect(()=>{void load();},[load]);
  useEffect(()=>{let stale=false;const paths=items.flatMap(c=>c.photo_paths||[]);if(!paths.length){setPhotos({});return;}void Promise.all(paths.map(p=>supabase.storage.from('claim-photos').createSignedUrl(p,900))).then(res=>{if(!stale)setPhotos(Object.fromEntries(paths.map((p,i)=>[p,res[i].data?.signedUrl||''])));});return()=>{stale=true;};},[items]);
- useEffect(()=>{if(editing===null)setForm(p=>({...p,factory}));},[factory,editing]);
+ useEffect(()=>{if(editing===null)setForm(p=>({...p,factory,worker1_id:p.factory===factory?p.worker1_id:null,worker2_id:p.factory===factory?p.worker2_id:null}));setSearch('');},[factory,editing]);
  const memberName=(id:number|null)=>id===null?'-':members.find(x=>x.id===id)?.full_name||'이전 직원';
- const options=useMemo(()=>members.filter(p=>p.active&&`${p.full_name} ${p.employee_code}`.toLowerCase().includes(search.toLowerCase())&&p.id!==form.worker1_id&&p.id!==form.worker2_id).slice(0,35),[members,search,form.worker1_id,form.worker2_id]);
+ const eligibleWorkers=useMemo(()=>members.filter(p=>p.active&&p.team===form.factory&&p.employee_role==='worker'&&p.division_role==='작업자'),[members,form.factory]);
+ const options=useMemo(()=>eligibleWorkers.filter(p=>`${p.full_name} ${p.employee_code}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())&&p.id!==form.worker1_id&&p.id!==form.worker2_id),[eligibleWorkers,search,form.worker1_id,form.worker2_id]);
  const update=(key:keyof typeof emptyForm,value:string|number|null)=>setForm(p=>({...p,[key]:value}));
  const pick=(id:number)=>{if(form.worker1_id===null)update('worker1_id',id);else if(form.worker2_id===null)update('worker2_id',id);setSearch('');};
  const reset=()=>{setForm({...emptyForm,received_date:kstDay(),factory});setEditing(null);setSearch('');setFiles([]);};
@@ -74,6 +75,8 @@ export default function CustomerClaims({lang,isAdmin}:{lang:Lang;isAdmin:boolean
   if(!isAdmin||busy||!form.customer_name.trim()||!form.product_name.trim()||!form.received_date)return;
   setBusy(true);setMessage('');try{
    if(form.worker1_id!==null&&form.worker1_id===form.worker2_id)throw new Error('Duplicate employee');
+   const selectedIds=[form.worker1_id,form.worker2_id].filter((id):id is number=>id!==null);
+   if(selectedIds.some(id=>!eligibleWorkers.some(p=>p.id===id)))throw new Error('Selected worker is not an active worker in this team');
    const translated=await translateDetail(form.description);
    const original=items.find(c=>c.id===editing);
    const values={...form,production_date:form.production_date||null,specification:[form.material,form.color,form.pack_quantity].filter(Boolean).join(' / '),description_i18n:translated};
@@ -101,7 +104,7 @@ export default function CustomerClaims({lang,isAdmin}:{lang:Lang;isAdmin:boolean
    <label className="text-sm">{tr(lang,'machine')}<select className={field} value={form.machine_no} onChange={e=>update('machine_no',e.target.value)}><option value="">{tr(lang,'noMachine')}</option>{machines.map(m=><option key={m} value={m}>{lang==='ko'?m+'호기':m}</option>)}</select></label>
    <label className="text-sm">{tr(lang,'defect')}<select className={field} value={form.defect_type} onChange={e=>update('defect_type',e.target.value)}><option value="">{tr(lang,'noMachine')}</option>{defects.map(d=><option key={d} value={d}>{d}</option>)}</select></label>
    {([['material','material'],['color','color'],['pack_quantity','pack']] as const).map(([key,label])=><label key={key} className="text-sm">{tr(lang,label)}<input className={field} value={form[key]} onChange={e=>update(key,e.target.value)}/></label>)}
-   </div><div className="rounded-lg bg-green-50 p-3"><h4 className="mb-2 text-sm font-bold">{tr(lang,'workers')}</h4><div className="mb-2 flex flex-wrap gap-2">{([form.worker1_id,form.worker2_id] as (number|null)[]).map((id,i)=><span key={i} className="rounded-full border bg-white px-3 py-1 text-xs">{i+1}. {memberName(id)} {id!==null&&<button type="button" className="ml-2 text-red-700" onClick={()=>update(i===0?'worker1_id':'worker2_id',null)}>×</button>}</span>)}</div><input className={field} value={search} onChange={e=>setSearch(e.target.value)} placeholder={tr(lang,'search')}/><div className="mt-2 flex max-h-32 flex-wrap gap-1 overflow-y-auto">{options.map(p=><button key={p.id} disabled={form.worker1_id!==null&&form.worker2_id!==null} onClick={()=>pick(p.id)} className="rounded border bg-white px-2 py-1 text-xs disabled:opacity-40">+ {p.full_name}</button>)}</div></div>
+   </div><div className="rounded-lg bg-green-50 p-3"><h4 className="mb-2 text-sm font-bold">{tr(lang,'workers')}</h4><div className="mb-2 flex flex-wrap gap-2">{([form.worker1_id,form.worker2_id] as (number|null)[]).map((id,i)=><span key={i} className="rounded-full border bg-white px-3 py-1 text-xs">{i+1}. {memberName(id)} {id!==null&&<button type="button" className="ml-2 text-red-700" onClick={()=>update(i===0?'worker1_id':'worker2_id',null)}>×</button>}</span>)}</div><input className={field} value={search} onChange={e=>setSearch(e.target.value)} placeholder={tr(lang,'search')}/><div className="mt-2 text-xs font-semibold text-green-900">{tr(lang,form.factory==='vacuum'?'vac':'mat')} · {eligibleWorkers.length} {({ko:'명',en:'workers',ne:'जना',km:'នាក់',tl:'manggagawa',vi:'người'} as Record<Lang,string>)[lang]}</div><div className="mt-2 flex max-h-48 flex-wrap gap-1 overflow-y-auto">{options.map(p=><button key={p.id} disabled={form.worker1_id!==null&&form.worker2_id!==null} onClick={()=>pick(p.id)} className="rounded border bg-white px-2 py-1 text-xs disabled:opacity-40">+ {p.full_name}</button>)}</div></div>
    <label className="block text-sm">{tr(lang,'detail')}<textarea rows={3} className={field} value={form.description} onChange={e=>update('description',e.target.value)}/></label><label className="block text-sm">{tr(lang,'photo')}<input className={field} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={e=>setFiles(Array.from(e.target.files||[]).slice(0,3))}/></label>
    <div className="flex gap-2"><button disabled={busy} className="rounded bg-[#168253] px-5 py-2 font-bold text-white disabled:opacity-40" onClick={()=>void save()}>{tr(lang,'save')}</button>{editing!==null&&<button className="rounded border px-4 py-2" onClick={reset}>{tr(lang,'cancel')}</button>}</div></section>}
   {items.length===0?<div className="rounded-lg border bg-white p-4">{tr(lang,'empty')}</div>:<div className="grid items-start gap-3 xl:grid-cols-2">{items.map(row=>{const workerIds=[row.worker1_id,row.worker2_id].filter((id):id is number=>id!==null);const received=receiptsFor(row);const myReceipt=received.some(r=>r.staff_id===myId);const isMine=myId!==null&&workerIds.includes(myId);return <article key={row.id} className="rounded-xl border bg-white p-4 shadow-sm"><button className="w-full text-left" onClick={()=>setExpanded(expanded===row.id?null:row.id)}><div className="flex justify-between gap-2"><b className="text-[#145C42]">{row.customer_name} · {row.product_name}</b><span className="text-xs text-gray-500">{row.received_date}</span></div><p className="mt-2 text-sm">{row.machine_no?(lang==='ko'?row.machine_no+'호기':row.machine_no):tr(lang,'noMachine')} · {[row.material,row.color,row.pack_quantity].filter(Boolean).join(' / ')||row.specification||'-'}</p><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="rounded bg-gray-100 px-2 py-1">{row.defect_type||'-'}</span><span className="rounded bg-green-50 px-2 py-1 text-green-800">{received.length}/{workerIds.length} {tr(lang,'acked')}</span></div></button>
