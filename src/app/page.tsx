@@ -1,5 +1,5 @@
 'use client';
-import {useCallback,useEffect,useState} from 'react';
+import {useCallback,useEffect,useRef,useState} from 'react';
 import {supabase} from './supabase';
 import AttendanceManager from './AttendanceManager';
 import ShiftRoster from './ShiftRoster';
@@ -10,7 +10,6 @@ import StaffAdmin from './StaffAdmin';
 import OrganizationChart from './OrganizationChart';
 import CustomerClaims from './CustomerClaims';
 import NewMaterialRoster from './NewMaterialRoster';
-import SupervisorAdmin from './SupervisorAdmin';
 import BreakTimeManager from './BreakTimeManager';
 import MachineRegistry from './MachineRegistry';
 import ProductionSettings from './ProductionSettings';
@@ -18,12 +17,16 @@ import DailyAttendanceExport from './DailyAttendanceExport';
 import TBMManager from './TBMManager';
 import TBMInbox from './TBMInbox';
 import AssistantChat from './AssistantChat';
+import MySchedule from './MySchedule';
+import AccessManager from './AccessManager';
+import {menuText, type MenuKey} from './menuText';
 import {tbmText as tbmT} from './tbmText';
 import {pu} from './productionUiText';
 import {s} from './staffText';
 import {languages,t,type Lang,type Team,type Key} from './i18n';
 
-type Page='dashboard'|'calendar'|'notice'|'attendance'|'shift'|'staffportal'|'staffadmin'|'organization'|'claims'|'breaks'|'machines'|'settings'|'dailyreport'|'tbm';
+type Page='dashboard'|'calendar'|'notice'|'myattendance'|'myleave'|'myclaims'|'attendance'|'shift'|'staffportal'|'staffadmin'|'organization'|'productionStatus'|'inventory'|'risk'|'claims'|'breaks'|'machines'|'settings'|'dailyreport'|'tbm'|'access';
+type AppRole='chief'|'subadmin'|'operator'|'worker';
 type Notice={id:number;team:Team;content_ko:string;content_en:string|null;content_ne:string|null;content_km:string|null;content_tl:string|null;content_vi:string|null;important:boolean;created_at:string};
 type Translated={en:string;ne:string;km:string;tl:string;vi:string};
 const button='rounded-lg bg-[#168253] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40';
@@ -37,6 +40,11 @@ export default function Home(){
   const [authReady,setAuthReady]=useState(false);
   const [signedIn,setSignedIn]=useState(false);
   const [isSupervisor,setIsSupervisor]=useState(false);
+  const [accessRole,setAccessRole]=useState<AppRole>('worker');
+  const [accessPermissions,setAccessPermissions]=useState<string[]>([]);
+  const [accessScope,setAccessScope]=useState<Team|null>(null);
+  const [legacySupervisor,setLegacySupervisor]=useState(false);
+  const landingSet=useRef(false);
   const [staffCode,setStaffCode]=useState('');
   const [loginType,setLoginType]=useState<'staff'|'admin'>('staff');
   const [showLogin,setShowLogin]=useState(false);
@@ -44,7 +52,7 @@ export default function Home(){
   const [password,setPassword]=useState('');
   const [menuOpen,setMenuOpen]=useState(false);
   const [languageMenuOpen,setLanguageMenuOpen]=useState(false);
-  const [navExpanded,setNavExpanded]=useState('attendance');
+  const [navExpanded,setNavExpanded]=useState('mySchedule');
   const [expanded,setExpanded]=useState<Record<Team,boolean>>({vacuum:true,newmaterial:true});
   const [input,setInput]=useState('');
   const [important,setImportant]=useState(false);
@@ -67,17 +75,37 @@ export default function Home(){
     setLoading(false);
   },[lang]);
   const checkAdmin=useCallback(async()=>{
-    const {data}=await supabase.auth.getUser();
-    if(!data.user){setIsAdmin(false);setIsSupervisor(false);setSignedIn(false);setAuthReady(true);return;}
-    setSignedIn(true);
-    const {data:admin,error}=await supabase.from('admin_users').select('user_id').eq('user_id',data.user.id).maybeSingle();
-    const isChief=!error&&!!admin;setIsAdmin(isChief);
-    if(!isChief){const {data:member}=await supabase.from('staff_members').select('id').eq('auth_user_id',data.user.id).eq('active',true).maybeSingle();
-      const {data:supervisorAccess}=await supabase.from('production_supervisors').select('user_id').eq('user_id',data.user.id).maybeSingle();
-      if(!member&&!supervisorAccess){await supabase.auth.signOut();setSignedIn(false);setIsSupervisor(false);setAuthReady(true);return;}
+    const {data:{user}}=await supabase.auth.getUser();
+    if(!user){setIsAdmin(false);setIsSupervisor(false);setSignedIn(false);setAccessRole('worker');setAccessPermissions([]);setAccessScope(null);landingSet.current=false;setAuthReady(true);return;}
+    const [adminQuery,staffQuery,supervisorQuery,sessionQuery]=await Promise.all([
+      supabase.from('admin_users').select('user_id').eq('user_id',user.id).maybeSingle(),
+      supabase.from('staff_members').select('id,team,employee_role').eq('auth_user_id',user.id).eq('active',true).maybeSingle(),
+      supabase.from('production_supervisors').select('user_id').eq('user_id',user.id).maybeSingle(),
+      supabase.auth.getSession(),
+    ]);
+    const chief=!!adminQuery.data&&!adminQuery.error;
+    const legacySub=!!supervisorQuery.data;
+    if(!chief&&!staffQuery.data&&!legacySub){await supabase.auth.signOut();setSignedIn(false);setIsAdmin(false);setIsSupervisor(false);landingSet.current=false;setAuthReady(true);return;}
+    let role:AppRole=chief?'chief':legacySub?'subadmin':staffQuery.data?.employee_role==='operator'?'operator':'worker';
+    let rights:string[]=[];
+    let scope:Team|null=(staffQuery.data?.team as Team)||null;
+    let legacy=legacySub;
+    const token=sessionQuery.data.session?.access_token;
+    if(token){
+      try{const res=await fetch('/api/role-access',{headers:{Authorization:`Bearer ${token}`}});
+        if(res.ok){const a=await res.json() as {role?:AppRole;permissions?:string[];teamScope?:Team;grantExists?:boolean;legacySupervisor?:boolean};
+          if(a.role)role=a.role;
+          rights=Array.isArray(a.permissions)?a.permissions:[];
+          if(a.teamScope)scope=a.teamScope;
+          legacy=!!a.legacySupervisor&&!a.grantExists;
+        }
+      }catch{/* Keep existing roles when the new access API is unavailable. */}
     }
-    const {data:supervisor}=await supabase.from('production_supervisors').select('user_id').eq('user_id',data.user.id).maybeSingle();
-    setIsSupervisor(!!supervisor);if(!isChief&&!supervisor)setPage('staffportal');setAuthReady(true);
+    if(chief)role='chief';
+    if(role==='subadmin'&&scope)setTeam(scope);
+    setSignedIn(true);setIsAdmin(chief);setIsSupervisor(role==='subadmin');setAccessRole(role);setAccessPermissions(rights);setAccessScope(scope);setLegacySupervisor(legacy);
+    if(!landingSet.current){setPage(role==='operator'||role==='worker'?'myattendance':'dashboard');setNavExpanded(role==='operator'||role==='worker'?'mySchedule':'dashboard');landingSet.current=true;}
+    setAuthReady(true);
   },[]);
   useEffect(()=>{
     void loadNotices();void checkAdmin();
@@ -92,7 +120,7 @@ export default function Home(){
     const {data:admin,error:roleError}=await supabase.from('admin_users').select('user_id').eq('user_id',data.user.id).maybeSingle();
     const {data:supervisor}=await supabase.from('production_supervisors').select('user_id').eq('user_id',data.user.id).maybeSingle();
     if((roleError||!admin)&&!supervisor){await supabase.auth.signOut();setMessage(t(lang,'loginRequired'));setIsAdmin(false);}else{
-      setIsSupervisor(!!supervisor);setIsAdmin(!!admin);setSignedIn(true);setPage('dashboard');setShowLogin(false);setPassword('');setMessage('');
+      setIsSupervisor(!!supervisor);setIsAdmin(!!admin);setSignedIn(true);landingSet.current=false;await checkAdmin();setShowLogin(false);setPassword('');setMessage('');
     }
     setBusy(false);
   };
@@ -114,12 +142,12 @@ export default function Home(){
         if(error)throw error;
       }catch{setMessage('아이디 또는 비밀번호가 맞지 않습니다.');setBusy(false);return;}
     }
-    setSignedIn(true);setIsAdmin(false);setPage('staffportal');setPassword('');setBusy(false);
+    setSignedIn(true);setIsAdmin(false);landingSet.current=false;await checkAdmin();setPassword('');setBusy(false);
   };
   const logout=async()=>{
     const {error}=await supabase.auth.signOut();
     if(error){setMessage(`${t(lang,'fail')}: ${error.message}`);return;}
-    setIsAdmin(false);setIsSupervisor(false);setSignedIn(false);setEditId(null);setInput('');setMessage('');
+    setIsAdmin(false);setIsSupervisor(false);setSignedIn(false);setAccessPermissions([]);landingSet.current=false;setEditId(null);setInput('');setMessage('');
   };
   const nav=(target:Page,selected?:Team)=>{
     if(selected)setTeam(selected);
@@ -188,38 +216,31 @@ export default function Home(){
     {isAdmin&&<div className="mt-4 flex flex-wrap justify-end gap-2 border-t pt-3"><button onClick={()=>retran(n)} disabled={busy} className="rounded-lg border px-3 py-2 text-xs">🌐 {t(lang,'retranslate')}</button><button onClick={()=>editNotice(n)} className="rounded-lg border px-3 py-2 text-xs">{t(lang,'edit')}</button><button disabled={busy} onClick={()=>deleteNotice(n)} className="rounded-lg border border-red-200 px-3 py-2 text-xs text-red-700">{t(lang,'remove')}</button></div>}
   </article>;
   const sidebarButton=(label:string,active:boolean,fn:()=>void)=><button onClick={fn} className={`w-full rounded-lg px-3 py-2 text-left text-sm sm:py-2.5 ${active?'bg-white font-bold text-[#145C42]':'text-[#E0F4E8] hover:bg-[#267553]'}`}>{label}</button>;
-  const navTitles:Record<string,Record<Lang,string>>={
-    attendance:{ko:'근태 · 인력관리',en:'Attendance & people',ne:'हाजिरी र कर्मचारी',km:'វត្តមាន និងបុគ្គលិក',tl:'Pagpasok at tauhan',vi:'Chấm công & nhân sự'},
-    production:{ko:'생산 · 설비관리',en:'Production & machines',ne:'उत्पादन र मेसिन',km:'ផលិតកម្ម និងម៉ាស៊ីន',tl:'Produksyon at makina',vi:'Sản xuất & thiết bị'},
-    safety:{ko:'안전 · 교육관리',en:'Safety & training',ne:'सुरक्षा र तालिम',km:'សុវត្ថិភាព និងបណ្តុះបណ្តាល',tl:'Kaligtasan at pagsasanay',vi:'An toàn & đào tạo'},
-    quality:{ko:'품질 · 고객관리',en:'Quality & customers',ne:'गुणस्तर र ग्राहक',km:'គុណភាព និងអតិថិជន',tl:'Kalidad at customer',vi:'Chất lượng & khách hàng'},
-    comm:{ko:'공지 · 소통',en:'Notices & communication',ne:'सूचना र सञ्चार',km:'ការជូនដំណឹង និងទំនាក់ទំនង',tl:'Abiso at komunikasyon',vi:'Thông báo & liên lạc'},
-    system:{ko:'시스템 관리',en:'System administration',ne:'प्रणाली व्यवस्थापन',km:'គ្រប់គ្រងប្រព័ន្ធ',tl:'Pangangasiwa',vi:'Quản trị hệ thống'}
-  };
-  const groupedNav:{key:string;pages:{id:Page;label:string;admin?:boolean;teams?:boolean}[]}[]=[
-    {key:'attendance',pages:[{id:'attendance',label:t(lang,'attendance'),teams:true},{id:'dailyreport',label:({ko:'일일 근태보고서',en:'Daily attendance report',ne:'दैनिक हाजिरी',km:'របាយការណ៍វត្តមាន',tl:'Arawang ulat',vi:'Báo cáo ngày'} as Record<Lang,string>)[lang],admin:true},{id:'shift',label:t(lang,'shift'),teams:true},{id:'staffportal',label:s(lang,'staffPortal')},{id:'calendar',label:t(lang,'calendar')},{id:'organization',label:pu(lang,'organization')}]},
-    {key:'production',pages:[{id:'machines',label:pu(lang,'machineMenu')}]},
-    {key:'safety',pages:[{id:'tbm',label:tbmT(lang,'tbm')},{id:'breaks',label:pu(lang,'breakMenu')}]},
-    {key:'quality',pages:[{id:'claims',label:pu(lang,'claims')}]},
-    {key:'comm',pages:[{id:'notice',label:t(lang,'notice'),teams:true}]},
-    {key:'system',pages:[{id:'staffadmin',label:s(lang,'staffAdmin'),admin:true},{id:'settings',label:pu(lang,'settings'),admin:true}]},
+  const has=(permission:string)=>isAdmin||(isSupervisor&&(accessPermissions.includes(permission)||(legacySupervisor&&['machines.manage','breaks.view'].includes(permission))));
+  const groupedNav:{key:MenuKey;landing?:Page;pages:{id:Page;key:MenuKey;chiefOnly?:boolean;subPermission?:string;chiefOrSub?:boolean;pending?:boolean}[]}[]=[
+    {key:'dashboard',landing:'dashboard',pages:[{id:'notice',key:'notice'},{id:'calendar',key:'calendar'}]},
+    {key:'mySchedule',landing:'myattendance',pages:[{id:'myattendance',key:'myAttendance'},{id:'myleave',key:'myLeave'},{id:'myclaims',key:'myClaims'}]},
+    {key:'attendanceGroup',pages:[{id:'attendance',key:'attendance'},{id:'shift',key:'shift'}]},
+    {key:'production',pages:[{id:'organization',key:'organization'},{id:'productionStatus',key:'productionStatus',pending:true},{id:'inventory',key:'inventory',pending:true},{id:'machines',key:'machines'}]},
+    {key:'education',pages:[{id:'tbm',key:'tbm'},{id:'risk',key:'risk',pending:true}]},
+    {key:'quality',pages:[{id:'claims',key:'claims'}]},
+    {key:'system',pages:[{id:'settings',key:'settings'}]},
+    {key:'operations',pages:[{id:'staffadmin',key:'staffadmin',chiefOnly:true},{id:'dailyreport',key:'dailyreport',chiefOrSub:true,subPermission:'dailyreport.manage'},{id:'breaks',key:'breaks',chiefOrSub:true,subPermission:'breaks.view'},{id:'access',key:'access',chiefOnly:true}]},
   ];
+  const canVisit=(item:{id:Page;chiefOnly?:boolean;chiefOrSub?:boolean;subPermission?:string})=>{
+    if(item.chiefOnly)return isAdmin;
+    if(item.chiefOrSub)return isAdmin||(isSupervisor&&!!item.subPermission&&has(item.subPermission));
+    return true;
+  };
+  const accessibleGroups=groupedNav.map(group=>({...group,pages:group.pages.filter(canVisit)})).filter(g=>g.pages.length>0);
   const sidebar=<div className="flex h-full min-h-0 flex-col bg-[#145C42] text-white">
-    <div className="flex items-center justify-between gap-2 border-b border-[#34785B] px-4 py-3 sm:p-5">
-      <div className="min-w-0"><p className="text-xl font-bold tracking-tight">SERIM B&G</p><p className="text-xs text-[#C5E8D2]">Eco-friendly Production System</p></div>
-      <button type="button" className="shrink-0 rounded-lg border border-[#47866A] px-3 py-2 text-lg sm:hidden" aria-label="메뉴 닫기" onClick={()=>setMenuOpen(false)}>✕</button>
-    </div>
+    <div className="flex items-center justify-between gap-2 border-b border-[#34785B] px-4 py-3 sm:p-5"><div className="min-w-0"><p className="text-xl font-bold tracking-tight">SERIM B&G</p><p className="text-xs text-[#C5E8D2]">Eco-friendly Production System</p></div><button type="button" className="shrink-0 rounded-lg border border-[#47866A] px-3 py-2 text-lg sm:hidden" aria-label="메뉴 닫기" onClick={()=>setMenuOpen(false)}>✕</button></div>
     <nav aria-label="생산본부 메뉴" className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain p-2 pb-4 sm:space-y-2 sm:p-3">
-      {sidebarButton(`⌂ ${t(lang,'dashboard')}`,page==='dashboard',()=>nav('dashboard'))}
-      {groupedNav.filter(x=>x.key!=='system'||isAdmin).map(x=><div key={x.key} className="rounded-md border-t border-[#34785B] pt-1 sm:pt-2">
-        <button type="button" className="flex w-full items-center justify-between px-3 py-2 text-left text-sm font-bold text-white" aria-expanded={navExpanded===x.key} onClick={()=>setNavExpanded(p=>p===x.key?'':x.key)}><span>{navTitles[x.key][lang]}</span><span aria-hidden>{navExpanded===x.key?'▾':'▸'}</span></button>
-        {navExpanded===x.key&&<div className="space-y-0.5 pl-2 md:space-y-1">{x.pages.filter(item=>!item.admin||isAdmin).map(item=><div key={item.id}>{sidebarButton('• '+item.label,page===item.id,()=>nav(item.id))}</div>)}</div>}
+      {accessibleGroups.map(group=><div key={group.key} className="rounded-md border-t border-[#34785B] pt-1 sm:pt-2">
+        <div className="flex items-center"><button type="button" className="flex-1 px-3 py-2 text-left text-sm font-bold text-white" onClick={()=>{setNavExpanded(p=>p===group.key?'':group.key);if(group.landing)nav(group.landing);}}>{menuText(lang,group.key)}</button><button type="button" className="px-3 py-2 text-white" aria-label={menuText(lang,group.key)+' 하위 메뉴'} aria-expanded={navExpanded===group.key} onClick={()=>setNavExpanded(p=>p===group.key?'':group.key)}>{navExpanded===group.key?'▾':'▸'}</button></div>
+        {navExpanded===group.key&&<div className="space-y-0.5 pl-2 md:space-y-1">{group.pages.map(item=><div key={item.id}>{sidebarButton('• '+menuText(lang,item.key)+(item.pending?' · 준비중':''),page===item.id,()=>nav(item.id))}</div>)}</div>}
       </div>)}
-    </nav>
-    <div className="border-t border-[#34785B] px-4 pt-3 text-xs text-[#BDE7D0]" style={{paddingBottom:'max(12px, env(safe-area-inset-bottom))'}}>
-      <button type="button" className="mb-3 w-full rounded-lg border border-[#47866A] bg-[#1F6D51] px-3 py-2.5 text-left text-sm font-semibold text-white sm:hidden" onClick={()=>{setMenuOpen(false);void logout();}}>{t(lang,'logout')}</button>
-      © SERIM B&G
-    </div>
+    </nav><div className="border-t border-[#34785B] px-4 pt-3 text-xs text-[#BDE7D0]" style={{paddingBottom:'max(12px, env(safe-area-inset-bottom))'}}><button type="button" className="mb-3 w-full rounded-lg border border-[#47866A] bg-[#1F6D51] px-3 py-2.5 text-left text-sm font-semibold text-white sm:hidden" onClick={()=>{setMenuOpen(false);void logout();}}>{t(lang,'logout')}</button>© SERIM B&G</div>
   </div>;
   const dashboard=<div className="space-y-5"><div className="rounded-2xl bg-gradient-to-r from-[#145C42] to-[#25865B] p-6 text-white"><p className="text-sm">SERIM B&G</p><h2 className="mt-1 text-2xl font-bold">{t(lang,'dashboard')}</h2><p className="mt-2 text-sm">{t(lang,'welcome')}</p></div><div className="grid grid-cols-3 gap-2">{[[notices.length,'countNotice'],[2,'countTeams'],[6,'countLanguages']].map(([num,key])=><div key={key} className={card}><div className="text-2xl font-black text-[#168253]">{num}</div><p className="text-xs text-gray-500">{t(lang,key as Key)}</p></div>)}</div><TodayDashboard lang={lang}/><TBMInbox lang={lang} onOpen={()=>nav('tbm')}/><h3 className="font-bold text-[#145C42]">{t(lang,'latest')}</h3>{notices.length?notices.slice(0,5).map(noticeCard):<div className={card}>{t(lang,'emptyNotice')}</div>}</div>;
   const noticePage=<div className="space-y-4"><div className={card}><div className="text-sm text-[#168253]">{t(lang,'division')} / {t(lang,team)}</div><h2 className="text-xl font-bold text-[#145C42]">{t(lang,'notice')}</h2></div>{isAdmin&&<div className={card}><h3 className="mb-3 font-bold text-[#145C42]">{t(lang,editId!==null?'edit':'addNotice')}</h3><textarea rows={5} value={input} onChange={e=>setInput(e.target.value)} placeholder={t(lang,'noticeText')} className="w-full rounded-lg border p-3 text-sm"/><label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={important} onChange={e=>setImportant(e.target.checked)}/>{t(lang,'important')}</label><p className="my-3 text-xs text-amber-700">{t(lang,'translationNotice')}</p><div className="flex gap-2"><button className={button} disabled={busy||!input.trim()} onClick={saveNotice}>{busy?t(lang,'translationWorking'):t(lang,editId!==null?'save':'addNotice')}</button>{editId!==null&&<button className="rounded-lg border px-4 py-2" onClick={()=>{setInput('');setEditId(null);setImportant(false);}}>{t(lang,'cancel')}</button>}</div></div>}{notices.filter(n=>n.team===team).length?notices.filter(n=>n.team===team).map(noticeCard):<div className={card}>{t(lang,'emptyNotice')}</div>}</div>;
@@ -271,9 +292,9 @@ export default function Home(){
       </header>
       <main className="w-full max-w-none space-y-4 p-3 pb-24 sm:p-4 sm:pb-8 lg:p-6 lg:pb-8 2xl:p-8">
         {message&&<div role="status" className={card}>{message}</div>}
-        <div className="text-xs text-[#648778]">{t(lang,'division')} / {page==='notice'||page==='attendance'||page==='shift'?`${t(lang,team)} / `:''}{page==='staffportal'?s(lang,'staffPortal'):page==='staffadmin'?s(lang,'staffAdmin'):page==='organization'?pu(lang,'organization'):page==='claims'?pu(lang,'claims'):page==='breaks'?pu(lang,'breakMenu'):page==='machines'?pu(lang,'machineMenu'):page==='dailyreport'?({ko:'일일 근태보고서',en:'Daily attendance report',ne:'दैनिक हाजिरी रिपोर्ट',km:'របាយការណ៍វត្តមានប្រចាំថ្ងៃ',tl:'Arawang ulat ng pagpasok',vi:'Báo cáo chấm công hằng ngày'} as Record<Lang,string>)[lang]:page==='settings'?pu(lang,'settings'):page==='tbm'?tbmT(lang,'tbm'):t(lang,page as Key)}</div>
-        {(['attendance','shift','notice'] as Page[]).includes(page)&&<div className="flex flex-wrap items-center gap-2 rounded-xl border bg-white px-4 py-3"><span className="mr-2 text-sm font-semibold">{({ko:'팀 선택',en:'Select team',ne:'टोली छान्नुहोस्',km:'ជ្រើសរើសក្រុម',tl:'Pumili ng team',vi:'Chọn nhóm'} as Record<Lang,string>)[lang]}</span>{(['vacuum','newmaterial'] as Team[]).map(v=><button key={v} type="button" onClick={()=>setTeam(v)} className={`rounded-lg border px-4 py-2 text-sm ${team===v?'border-green-700 bg-green-50 font-bold text-green-900':''}`}>{t(lang,v)}</button>)}</div>}
-        {loading?<div className={card}>{t(lang,'loading')}</div>:page==='dashboard'?dashboard:page==='organization'?<OrganizationChart lang={lang}/>:page==='claims'?<CustomerClaims lang={lang} isAdmin={isAdmin}/>:page==='breaks'?<BreakTimeManager lang={lang} isAdmin={isAdmin||isSupervisor}/>:page==='machines'?<MachineRegistry lang={lang} isManager={isAdmin||isSupervisor}/>:page==='dailyreport'?<DailyAttendanceExport lang={lang} isAdmin={isAdmin}/>:page==='tbm'?<TBMManager lang={lang} isAdmin={isAdmin}/>:page==='settings'?<ProductionSettings lang={lang} onLanguage={changeLang} isAdmin={isAdmin} onNavigate={target=>nav(target)}/>:page==='calendar'?<CalendarManager lang={lang} isAdmin={isAdmin}/>:page==='staffportal'?<StaffPortal lang={lang}/>:page==='staffadmin'?<><SupervisorAdmin/><StaffAdmin lang={lang} isAdmin={isAdmin}/></>:page==='notice'?noticePage:page==='attendance'?<AttendanceManager team={team} isAdmin={isAdmin} lang={lang}/>:team==='newmaterial'?<NewMaterialRoster lang={lang} isAdmin={isAdmin}/>:<ShiftRoster team={team} isAdmin={isAdmin} lang={lang}/>}
+        <div className="text-xs text-[#648778]">{t(lang,'division')} / {page==='staffportal'?menuText(lang,'staffportal'):page==='dashboard'?menuText(lang,'dashboard'):menuText(lang,(Object.entries({calendar:'calendar',notice:'notice',myattendance:'myAttendance',myleave:'myLeave',myclaims:'myClaims',attendance:'attendance',shift:'shift',organization:'organization',productionStatus:'productionStatus',inventory:'inventory',machines:'machines',tbm:'tbm',risk:'risk',claims:'claims',settings:'settings',staffadmin:'staffadmin',dailyreport:'dailyreport',breaks:'breaks',access:'access'}) as [string,MenuKey][]).find(([id])=>id===page)?.[1]||'dashboard')}</div>
+        {(['attendance','shift','notice'] as Page[]).includes(page)&&<div className="flex flex-wrap items-center gap-2 rounded-xl border bg-white px-4 py-3"><span className="mr-2 text-sm font-semibold">{({ko:'팀 선택',en:'Select team',ne:'टोली छान्नुहोस्',km:'ជ្រើសរើសក្រុម',tl:'Pumili ng team',vi:'Chọn nhóm'} as Record<Lang,string>)[lang]}</span>{(['vacuum','newmaterial'] as Team[]).filter(v=>!(isSupervisor&&['attendance','shift'].includes(page)&& (has(page==='attendance'?'attendance.manage':'shift.manage')))||v===accessScope).map(v=><button key={v} type="button" onClick={()=>setTeam(v)} className={`rounded-lg border px-4 py-2 text-sm ${team===v?'border-green-700 bg-green-50 font-bold text-green-900':''}`}>{t(lang,v)}</button>)}</div>}
+        {loading?<div className={card}>{t(lang,'loading')}</div>:page==='dashboard'?dashboard:page==='myattendance'||page==='myleave'||page==='myclaims'?<MySchedule lang={lang} section={page==='myleave'?'leave':page==='myclaims'?'claims':'attendance'} onNavigate={target=>nav(target)}/>:page==='productionStatus'||page==='inventory'||page==='risk'?<div className={card}><h2 className="text-xl font-bold text-[#145C42]">{menuText(lang,page==='productionStatus'?'productionStatus':page==='inventory'?'inventory':'risk')}</h2><p className="mt-2 text-sm text-gray-500">{t(lang,'ready')} · ERP 연동 및 신규 개발은 보류 중입니다.</p></div>:page==='access'?(isAdmin?<AccessManager lang={lang}/>:<div className={card}>Access denied</div>):page==='organization'?<OrganizationChart lang={lang}/>:page==='claims'?<CustomerClaims lang={lang} isAdmin={has('claims.manage')} scopeTeam={!isAdmin&&isSupervisor?accessScope:null}/>:page==='breaks'?<BreakTimeManager lang={lang} isAdmin={isAdmin||has('breaks.view')} scopeTeam={!isAdmin&&isSupervisor?accessScope:null}/>:page==='machines'?<MachineRegistry lang={lang} isManager={has('machines.manage')} granularAccess={!isAdmin&&!legacySupervisor}/>:page==='dailyreport'?<DailyAttendanceExport lang={lang} isAdmin={isAdmin||has('dailyreport.manage')} scopeTeam={!isAdmin&&isSupervisor?accessScope:null}/>:page==='tbm'?<TBMManager lang={lang} isAdmin={isAdmin}/>:page==='settings'?<ProductionSettings lang={lang} onLanguage={changeLang} isAdmin={isAdmin} onNavigate={target=>nav(target)}/>:page==='calendar'?<CalendarManager lang={lang} isAdmin={has('calendar.manage')} scopeTeam={!isAdmin&&isSupervisor?accessScope:null}/>:page==='staffportal'?<StaffPortal lang={lang}/>:page==='staffadmin'?(isAdmin?<StaffAdmin lang={lang} isAdmin={isAdmin}/>:<div className={card}>Access denied</div>):page==='notice'?noticePage:page==='attendance'?<AttendanceManager team={team} isAdmin={has('attendance.manage')&&(!isSupervisor||!accessScope||team===accessScope)} lang={lang}/>:team==='newmaterial'?<NewMaterialRoster lang={lang} isAdmin={isAdmin} />:<ShiftRoster team={team} isAdmin={has('shift.manage')&&(!isSupervisor||!accessScope||team===accessScope)} lang={lang}/>}
       </main>
     </div>
     <AssistantChat lang={lang} menuOpen={menuOpen}/>

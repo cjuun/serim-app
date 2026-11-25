@@ -15,7 +15,7 @@ const dict = {
   brand: ['세림비앤지 생산관리','SERIM B&G Production','SERIM B&G उत्पादन','ផលិតកម្ម SERIM B&G','Produksyon ng SERIM B&G','Quản lý sản xuất SERIM B&G'],
   dashboard: ['대시보드','Dashboard','ड्यासबोर्ड','ផ្ទាំងគ្រប់គ្រង','Dashboard','Bảng điều khiển'],
   reports: ['월별 출석 보고서','Attendance reports','उपस्थिति रिपोर्ट','របាយការណ៍វត្តមាន','Ulat ng attendance','Báo cáo chấm công'],
-  calendar: ['통합 캘린더','Calendar','पात्रो','ប្រតិទិន','Kalendaryo','Lịch tổng hợp'],
+  calendar: ['캘린더','Calendar','पात्रो','ប្រតិទិន','Kalendaryo','Lịch tổng hợp'],
   division: ['생산본부','Production Division','उत्पादन विभाग','ផ្នែកផលិតកម្ម','Dibisyon ng Produksyon','Bộ phận sản xuất'],
   vacuum: ['진공성형팀','Vacuum Forming Team','भ्याकुम फर्मिङ टोली','ក្រុមបង្កើតទម្រង់សុញ្ញាកាស','Vacuum Forming Team','Đội tạo hình chân không'],
   newmaterial: ['신소재생산팀','New Materials Team','नयाँ सामग्री टोली','ក្រុមផលិតសម្ភារៈថ្មី','New Materials Team','Đội sản xuất vật liệu mới'],
