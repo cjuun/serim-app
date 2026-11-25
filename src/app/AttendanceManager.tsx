@@ -11,13 +11,12 @@ export default function AttendanceManager({team,isAdmin,lang}:{team:Team;isAdmin
   const [directory,setDirectory]=useState<{name:string;role:Role}[]|null>(null);
   const people=directory??employees[team];
   useEffect(()=>{
-    if(!isAdmin){setDirectory(null);return;}
     let cancelled=false;
     void supabase.from('staff_members').select('full_name,employee_role').eq('team',team).eq('active',true).order('id').then(({data,error})=>{
       if(!cancelled&&!error)setDirectory((data||[]).map(x=>({name:x.full_name,role:x.employee_role as Role})));
     });
     return()=>{cancelled=true;};
-  },[team,isAdmin]);
+  },[team]);
   const [search,setSearch]=useState('');
   const [date,setDate]=useState('');
   const [shift,setShift]=useState<Shift>('day');
@@ -50,10 +49,10 @@ export default function AttendanceManager({team,isAdmin,lang}:{team:Team;isAdmin
   },[date,team,isAdmin,week,lang]);
   useEffect(()=>{void load();},[load,refresh]);
   const visible=useMemo(()=>{
-    if(isAdmin)return assignments.filter(x=>x.shift===shift).map(x=>({name:x.employee_name,role:x.employee_role}));
+    if(isAdmin)return assignments.filter(x=>x.shift===shift&&people.some(p=>p.name===x.employee_name)).map(x=>({name:x.employee_name,role:x.employee_role}));
     if(!confirmed)return [];
-    return records.filter(x=>x.shift===shift).map(x=>({name:x.employee_name,role:x.employee_role}));
-  },[isAdmin,confirmed,assignments,records,shift]);
+    return records.filter(x=>x.shift===shift&&people.some(p=>p.name===x.employee_name)).map(x=>({name:x.employee_name,role:x.employee_role}));
+  },[isAdmin,confirmed,assignments,records,shift,people]);
   visible.sort((a,b)=>people.findIndex(x=>x.name===a.name)-people.findIndex(x=>x.name===b.name));
   const allChecked=assignments.length===people.length && assignments.every(x=>!!statuses[x.employee_name]);
   const markAllPresent=()=>{

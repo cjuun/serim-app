@@ -43,7 +43,7 @@ export default function TBMManager({lang,isAdmin}:{lang:Lang;isAdmin:boolean}){
  const [topic,setTopic]=useState(''),[detail,setDetail]=useState(''),[translations,setTranslations]=useState<Record<string,Translation>>({}),[dirty,setDirty]=useState(false);
  const [start,setStart]=useState('08:00'),[end,setEnd]=useState('08:10'),[risk,setRisk]=useState(true);
  const [photo,setPhoto]=useState<File|null>(null),[photoUrl,setPhotoUrl]=useState('');
- const [supervisorUuid,setSupervisorUuid]=useState(''),[supervisorName,setSupervisorName]=useState(''),[newMember,setNewMember]=useState('');
+ const [supervisorUuid,setSupervisorUuid]=useState(''),[supervisorName,setSupervisorName]=useState(''),[newMember,setNewMember]=useState(''),[memberSearch,setMemberSearch]=useState('');
  const [signMode,setSignMode]=useState<'staff'|'supervisor'|null>(null),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[message,setMessage]=useState('');
  const chosen=groups.find(x=>x.id===team);
  const canManage=isAdmin||Boolean(chosen?.supervisor_user_id&&chosen.supervisor_user_id===userId);
@@ -172,7 +172,7 @@ export default function TBMManager({lang,isAdmin}:{lang:Lang;isAdmin:boolean}){
    </>}
    {isAdmin&&<section className={card}><h3 className="mb-3 text-lg font-bold text-[#145C42]">{tx(lang,'staffAssignment')} · {tx(lang,'team')} {team}</h3>
       <div className="space-y-2 rounded-lg bg-green-50 p-3"><label className="text-xs">{tx(lang,'supervisorSetup')} · {tx(lang,'accountId')}<input className={`${input} mt-1`} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value={supervisorUuid} onChange={e=>setSupervisorUuid(e.target.value)}/></label><input className={input} value={supervisorName} placeholder={tx(lang,'supervisor')} onChange={e=>setSupervisorName(e.target.value)}/><button disabled={busy} className={primary} onClick={setManager}>{tx(lang,'save')}</button></div>
-      <div className="mt-3 grid grid-cols-[1fr_auto] gap-2"><select value={newMember} onChange={e=>setNewMember(e.target.value)} className={input}><option value="">{tx(lang,'addStaff')}</option>{people.filter(p=>!members.some(m=>m.staff_id===p.id)).map(p=><option key={p.id} value={p.id}>{p.full_name} · {p.employee_code}</option>)}</select><button disabled={busy||!newMember} className={primary} onClick={()=>void assign(Number(newMember))}>{tx(lang,'assign')}</button></div>
+      <div className="mt-3"><input value={memberSearch} onChange={e=>setMemberSearch(e.target.value)} placeholder="직원 이름 또는 직원번호 검색" className={input}/></div><div className="mt-3 grid grid-cols-[1fr_auto] gap-2"><select value={newMember} onChange={e=>setNewMember(e.target.value)} className={input}><option value="">{tx(lang,'addStaff')}</option>{people.filter(p=>!members.some(m=>m.staff_id===p.id)&&`${p.full_name} ${p.employee_code}`.toLowerCase().includes(memberSearch.trim().toLowerCase())).map(p=><option key={p.id} value={p.id}>{p.full_name} · {p.employee_code}</option>)}</select><button disabled={busy||!newMember} className={primary} onClick={()=>void assign(Number(newMember))}>{tx(lang,'assign')}</button></div>
       <div className="mt-3 space-y-1">{assigned.map(p=><div key={p.id} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"><span>{p.full_name}</span><button disabled={busy} className="text-red-700" onClick={()=>void unassign(p.id)}>{tx(lang,'remove')}</button></div>)}</div>
     </section>}
   </>}

@@ -1,7 +1,7 @@
 import type {Lang} from './i18n';
 const keys={
  tbm:['안전교육 TBM','TBM safety briefing','TBM सुरक्षा तालिम','ការបណ្ដុះបណ្ដាលសុវត្ថិភាព TBM','TBM na pagsasanay sa kaligtasan','Huấn luyện an toàn TBM'],
- schedule:['월·수·금 정기교육 · 5~10분','Monday · Wednesday · Friday · 5–10 minutes','सोम · बुध · शुक्र · ५–१० मिनेट','ច័ន្ទ · ពុធ · សុក្រ · ៥–១០ នាទី','Lunes · Miyerkules · Biyernes · 5–10 minuto','Thứ 2 · 4 · 6 · 5–10 phút'],
+ schedule:['매 근무일 교육 · 5~10분','Weekday briefing · 5–10 minutes','कार्यदिवसमा · ५–१० मिनेट','ថ្ងៃធ្វើការ · ៥–១០ នាទី','Araw ng trabaho · 5–10 minuto','Ngày làm việc · 5–10 phút'],
  team:['팀','Team','टोली','ក្រុម','Pangkat','Nhóm'],
  workPack:['플라스틱 트레이 포장 및 선별','Plastic tray packing and sorting','प्लास्टिक ट्रे प्याकिङ तथा छनोट','ការវេចខ្ចប់ និងជ្រើសរើសថាសប្លាស្ទិក','Pag-iimpake at pag-uuri ng plastic tray','Đóng gói và phân loại khay nhựa'],
  workScrap:['오퍼레이터 및 스크랩 작업','Operators and scrap handling','अपरेटर र स्क्र्याप कार्य','ប្រតិបត្តិករ និងការគ្រប់គ្រងសំណល់','Operator at paghawak ng scrap','Vận hành máy và xử lý phế liệu'],
