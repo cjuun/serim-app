@@ -14,13 +14,12 @@ export default function ShiftRoster({team,isAdmin,lang}:{team:Team;isAdmin:boole
   const [directory,setDirectory]=useState<{name:string;role:Role}[]|null>(null);
   const people=directory??employees[team];
   useEffect(()=>{
-    if(!isAdmin){setDirectory(null);return;}
     let cancelled=false;
     void supabase.from('staff_members').select('full_name,employee_role').eq('team',team).eq('active',true).order('id').then(({data,error})=>{
       if(!cancelled&&!error)setDirectory((data||[]).map(x=>({name:x.full_name,role:x.employee_role as Role})));
     });
     return()=>{cancelled=true;};
-  },[team,isAdmin]);
+  },[team]);
   const [index,setIndex]=useState(0);
   const [draft,setDraft]=useState<Record<string,Shift|''>>({});
   const [saved,setSaved]=useState<Saved[]>([]);
@@ -43,7 +42,8 @@ export default function ShiftRoster({team,isAdmin,lang}:{team:Team;isAdmin:boole
   useEffect(()=>{void load();},[load,refresh]);
   useEffect(()=>{setEditing(false);setMessage('');},[team,index]);
   const found=Object.fromEntries(saved.map(x=>[x.employee_name,x.shift]));
-  const complete=saved.length>0 && (!isAdmin || (saved.length===people.length && people.every(e=>found[e.name])));
+  const activeSaved=saved.filter(x=>people.some(p=>p.name===x.employee_name));
+  const complete=activeSaved.length>0 && (!isAdmin || (activeSaved.length===people.length && people.every(e=>found[e.name])));
   const selected=people.filter(x=>!!draft[x.name]).length;
   const setAll=(shift:Shift)=>setDraft(Object.fromEntries(people.map(x=>[x.name,shift])));
   const swap=()=>setDraft(p=>Object.fromEntries(people.map(x=>[x.name,p[x.name]==='day'?'night':p[x.name]==='night'?'day':''])));
@@ -87,7 +87,7 @@ export default function ShiftRoster({team,isAdmin,lang}:{team:Team;isAdmin:boole
     return <section key={role}><h4 className="mb-2 font-bold">{t(lang,role)} ({group.length} {t(lang,'people')})</h4>{group.map(p=><div key={p.name} className="grid grid-cols-[minmax(65px,1fr)_auto_auto] items-center gap-2 border-b py-2"><span className="text-sm">{p.name}</span>{(['day','night'] as Shift[]).map(s=><button key={s} onClick={()=>setDraft(prev=>({...prev,[p.name]:s}))} className={`rounded-lg px-2 py-2 text-xs ${draft[p.name]===s?(s==='day'?'bg-[#168253] text-white':'bg-[#394E79] text-white'):'bg-gray-100 text-gray-600'}`}>{s==='day'?'☀️':'🌙'} {t(lang,s)}</button>)}</div>)}</section>;
   };
   const display=(s:Shift)=>{
-    const members=(isAdmin?people:saved.map(x=>({name:x.employee_name,role:x.employee_role}))).filter(x=>found[x.name]===s);
+    const members=(isAdmin?people:activeSaved.map(x=>({name:x.employee_name,role:x.employee_role}))).filter(x=>found[x.name]===s);
     return <section className={`rounded-xl border p-4 ${s==='day'?'border-green-200 bg-[#EDF8F0]':'border-blue-200 bg-[#EEF2FB]'}`} key={s}>
       <h3 className="mb-3 text-lg font-bold">{s==='day'?'☀️':'🌙'} {t(lang,s)} · {members.length} {t(lang,'people')}</h3>
       {(['operator','worker'] as Role[]).map(role=>{

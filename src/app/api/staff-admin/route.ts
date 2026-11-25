@@ -28,7 +28,8 @@ export async function POST(req:NextRequest){
       const team=body.team;
       const employee_role=body.role;
       if(full_name.length<2||full_name.length>70||!['vacuum','newmaterial'].includes(String(team))||!['operator','worker'].includes(String(employee_role)))return reply('Invalid employee information',400);
-      const {data,error}=await service.from('staff_members').insert({full_name,team,employee_role}).select('id,employee_code,full_name,team,employee_role,active,auth_user_id').single();
+      const division_role=['최종상','박종선','강장원','김문수','박원식','주우팔','강동효','박경석','송형석','연원진','최준혁'].includes(full_name)?'관리자':employee_role==='operator'?'오퍼레이터':'작업자';
+      const {data,error}=await service.from('staff_members').insert({full_name,team,employee_role,division_role,rank_title:'사원'}).select('id,employee_code,full_name,team,employee_role,active,auth_user_id').single();
       if(error)return reply(error.message,400);
       return NextResponse.json({member:data});
     }
@@ -59,6 +60,16 @@ if (!member) {
       const {error}=await service.auth.admin.updateUserById(member.auth_user_id,{password});
       if(error)return reply(error.message,400);
       return NextResponse.json({employee_code:member.employee_code,temporary_password:password});
+    }
+    if(action==='remove'){
+      const reason=String(body.reason||'').trim();
+      if(!reason||reason.length>200)return reply('Removal reason required',400);
+      if(!member.active)return reply('Employee already inactive',409);
+      // Ban access FIRST; preserve employee ID and historical foreign-key references.
+      if(member.auth_user_id){const {error}=await service.auth.admin.updateUserById(member.auth_user_id,{ban_duration:'876000h'});if(error)return reply(error.message,400);}
+      const {error}=await auth.rpc('serim_offboard_staff',{p_staff:id,p_reason:reason});
+      if(error){if(member.auth_user_id)await service.auth.admin.updateUserById(member.auth_user_id,{ban_duration:'none'});return reply(error.message,400);}
+      return NextResponse.json({removed:true});
     }
     if(action==='disable'||action==='enable'){
       const active=action==='enable';
