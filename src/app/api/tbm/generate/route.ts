@@ -26,7 +26,7 @@ export async function POST(request:NextRequest){
  if(adminError||!admin)return NextResponse.json({error:'Admin only'},{status:403});
  const body=await request.json().catch(()=>({})) as {date?:string};
  const date=body.date||koreaDay();
- if(!trainingDay(date))return NextResponse.json({error:'Select a Monday/Wednesday/Friday date'},{status:400});
+ if(!trainingDay(date))return NextResponse.json({error:'Select a Monday-Friday working date'},{status:400});
  const delta=Math.abs(new Date(`${date}T00:00:00Z`).getTime()-new Date(`${koreaDay()}T00:00:00Z`).getTime());
  if(delta>31*86400000)return NextResponse.json({error:'Date must be within 31 days'},{status:400});
  try{return NextResponse.json({date,results:await generateTbmForDate(date)});}
